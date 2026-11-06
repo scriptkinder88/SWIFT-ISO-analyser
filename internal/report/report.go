@@ -88,6 +88,12 @@ func BuildDeck(db model.Database, generated time.Time) []pptx.Slide {
 		bullets := []string{
 			fmt.Sprintf("Tipo: %s · Zona: %s", c.Kind, c.Zone),
 		}
+		if c.OS != "" {
+			bullets = append(bullets, "Sistema operativo: "+c.OS)
+		}
+		if c.Parent != "" {
+			bullets = append(bullets, "Ospitato in: "+nameOf[c.Parent])
+		}
 		if c.AgentID != "" {
 			bullets = append(bullets, "Agent Wazuh: "+c.AgentID)
 		}

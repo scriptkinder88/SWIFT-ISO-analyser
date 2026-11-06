@@ -12,6 +12,15 @@
   const BAND_HEAD = 58;
   const MAX_COLS = 4;
   const MAX_SVG_BYTES = 64 * 1024;
+  const CHIP_H = 28;
+  const CHIP_GAP = 6;
+
+  const KINDS = {
+    server: "Server fisico", vm: "Macchina virtuale", container: "Container",
+    application: "Applicazione", database: "Database", network: "Apparato di rete",
+    hsm: "HSM", workstation: "Workstation", storage: "Storage",
+    "cloud-service": "Servizio cloud", external: "Esterno",
+  };
 
   const STATUSES = [
     ["non_valutato", "Da valutare"],
@@ -29,6 +38,7 @@
     internal:   { label: "Rete interna",         color: "#546e7a", width: 1.5, dash: "" },
     management: { label: "Gestione / sicurezza", color: "#2e7d32", width: 1.5, dash: "2 3" },
     backup:     { label: "Backup",               color: "#6a1b9a", width: 1.5, dash: "10 3 2 3" },
+    cloud:      { label: "Cloud",                color: "#0288d1", width: 1.8, dash: "12 4 2 4" },
   };
   const DEFAULT_NET = { label: "Non classificata", color: "#7f8a99", width: 1.5, dash: "" };
 
@@ -173,13 +183,22 @@
 
   // ---------- layout ----------
 
+  function childrenOf(id) {
+    return state.arch.components.filter((c) => c.parent === id);
+  }
+
+  // Height of a top-level component box: grows with the containers it hosts.
+  function boxHeight(comp) {
+    const n = childrenOf(comp.id).length;
+    return n ? NODE_H + 10 + n * (CHIP_H + CHIP_GAP) + 4 : NODE_H;
+  }
+
   // Zones are placed left to right, wrapping to a new band row after MAX_COLS.
   function computeLayout() {
     const zones = [];
     for (const c of state.arch.components) {
-      if (!zones.includes(c.zone)) zones.push(c.zone);
+      if (!c.parent && !zones.includes(c.zone)) zones.push(c.zone);
     }
-    const counts = zones.map((z) => state.arch.components.filter((c) => c.zone === z).length);
     const cols = Math.max(1, Math.min(MAX_COLS, zones.length));
     const bandRows = Math.ceil(zones.length / cols);
     const pos = {};
@@ -187,16 +206,23 @@
     let y0 = 0;
     for (let r = 0; r < bandRows; r++) {
       const idxs = zones.map((_, i) => i).filter((i) => Math.floor(i / cols) === r);
-      const tallest = Math.max(1, ...idxs.map((i) => counts[i]));
-      const bandH = BAND_HEAD + 30 + tallest * (NODE_H + ROW_GAP);
+      const sums = idxs.map((i) => state.arch.components
+        .filter((c) => !c.parent && c.zone === zones[i])
+        .reduce((acc, c) => acc + boxHeight(c) + ROW_GAP, 0));
+      const tallest = Math.max(NODE_H, ...sums);
+      const bandH = BAND_HEAD + 30 + tallest;
       for (const i of idxs) {
         const x = PAD + (i % cols) * COL_W;
         bands.push({ zone: zones[i], x: x - 20, y: y0 + 10, w: NODE_W + 40, h: bandH - 20 });
-        let row = 0;
+        let cy = y0 + BAND_HEAD;
         for (const comp of state.arch.components) {
-          if (comp.zone !== zones[i]) continue;
-          pos[comp.id] = { x, y: y0 + BAND_HEAD + row * (NODE_H + ROW_GAP) };
-          row++;
+          if (comp.parent || comp.zone !== zones[i]) continue;
+          const bh = boxHeight(comp);
+          pos[comp.id] = { x, y: cy, w: NODE_W, h: bh };
+          childrenOf(comp.id).forEach((child, k) => {
+            pos[child.id] = { x: x + 12, y: cy + NODE_H + 10 + k * (CHIP_H + CHIP_GAP), w: NODE_W - 24, h: CHIP_H };
+          });
+          cy += bh + ROW_GAP;
         }
       }
       y0 += bandH + ROW_GAP / 2;
@@ -210,21 +236,23 @@
 
   function edgePath(a, b) {
     const ax = a.x, ay = a.y, bx = b.x, by = b.y;
+    const acx = ax + a.w / 2, bcx = bx + b.w / 2;
+    const acy = ay + a.h / 2, bcy = by + b.h / 2;
     let sx, sy, ex, ey, c1x, c1y, c2x, c2y;
-    if (Math.abs(bx - ax) >= COL_W - 20) {
-      const right = bx > ax;
-      sx = right ? ax + NODE_W : ax;
-      ex = right ? bx : bx + NODE_W;
-      sy = ay + NODE_H / 2;
-      ey = by + NODE_H / 2;
+    if (Math.abs(bcx - acx) >= COL_W - 40) {
+      const right = bcx > acx;
+      sx = right ? ax + a.w : ax;
+      ex = right ? bx : bx + b.w;
+      sy = acy;
+      ey = bcy;
       const off = Math.max(40, Math.abs(ex - sx) / 2) * (right ? 1 : -1);
       c1x = sx + off; c1y = sy; c2x = ex - off; c2y = ey;
     } else {
-      const down = by > ay;
-      sx = ax + NODE_W / 2;
-      ex = bx + NODE_W / 2;
-      sy = down ? ay + NODE_H : ay;
-      ey = down ? by : by + NODE_H;
+      const down = bcy > acy;
+      sx = acx;
+      ex = bcx;
+      sy = down ? ay + a.h : ay;
+      ey = down ? by : by + b.h;
       const off = Math.max(30, Math.abs(ey - sy) / 2) * (down ? 1 : -1);
       c1x = sx; c1y = sy + off; c2x = ex; c2y = ey - off;
     }
@@ -281,7 +309,7 @@
         class: "zone", x: b.x, y: b.y, width: b.w, height: b.h, rx: 10,
         stroke: st.color, "stroke-dasharray": "12 6",
       }));
-      const text = b.zone + (info ? "  ·  " + st.label : "");
+      const text = b.zone;
       const tabW = Math.min(b.w + 40, 28 + text.length * 8.6);
       svg.append(svgEl("rect", { class: "zone-tab", x: b.x + 12, y: b.y - 12, width: tabW, height: 24, rx: 4, stroke: st.color }));
       const label = svgEl("text", { class: "zone-label", x: b.x + 22, y: b.y + 4 });
@@ -317,9 +345,10 @@
     }
     svg.append(linkLayer, labelLayer);
 
-    // nodes
+    // nodes: top-level components; contained components are drawn as chips inside
     const nodeLayer = svgEl("g");
-    state.arch.components.forEach((comp, index) => {
+    const topLevel = state.arch.components.filter((c) => !c.parent);
+    topLevel.forEach((comp, index) => {
       const p = pos[comp.id];
       const st = nodeStatus(comp);
       let cls = "node";
@@ -329,22 +358,26 @@
       const inner = svgEl("g", { class: state.mapAnimated ? "" : "pop" });
       inner.style.animationDelay = `${index * 50}ms`;
       const title = svgEl("title");
-      title.textContent = `${comp.name}${comp.vendor ? " · " + comp.vendor : ""}${comp.model ? " " + comp.model : ""}`;
+      title.textContent = nodeTitle(comp);
       g.append(title);
-      g.append(svgEl("rect", { class: "hitbox", width: NODE_W, height: NODE_H, rx: 8 }));
+      g.append(svgEl("rect", { class: "hitbox", width: p.w, height: p.h, rx: 8 }));
       if (comp.id === state.selectedComp || (hitSet && hitSet.has(comp.id))) {
-        g.append(svgEl("rect", { class: "ring", x: 4, y: -2, width: NODE_W - 8, height: NODE_H + 4, rx: 10 }));
+        g.append(svgEl("rect", { class: "ring", x: 4, y: -2, width: p.w - 8, height: p.h + 4, rx: 10 }));
       }
       inner.append(...symbolNodes(comp));
-      const name = svgEl("text", { class: "node-name", x: NODE_W / 2, y: 74 });
+      const name = svgEl("text", { class: "node-name", x: p.w / 2, y: 74 });
       name.textContent = truncate(comp.name, 26);
-      const meta = svgEl("text", { class: "node-meta", x: NODE_W / 2, y: 92 });
+      const meta = svgEl("text", { class: "node-meta", x: p.w / 2, y: 92 });
       meta.textContent = truncate(nodeMeta(comp), 34);
       inner.append(name, meta);
       if (st !== "none") {
-        inner.append(svgEl("circle", { class: "badge " + badgeClass(st), cx: NODE_W / 2 + 30, cy: 12, r: 7 }));
+        inner.append(svgEl("circle", { class: "badge " + badgeClass(st), cx: p.w / 2 + 30, cy: 12, r: 7 }));
       }
       g.append(inner);
+      for (const child of childrenOf(comp.id)) {
+        const cp = pos[child.id];
+        g.append(chipNode(child, { x: cp.x - p.x, y: cp.y - p.y, w: cp.w, h: cp.h }, hitSet));
+      }
       g.addEventListener("click", () => selectComponent(comp.id));
       g.addEventListener("keydown", (ev) => {
         if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); selectComponent(comp.id); }
@@ -352,7 +385,39 @@
       nodeLayer.append(g);
     });
     svg.append(nodeLayer);
+    state.mapAnimated = true;    svg.append(nodeLayer);
     state.mapAnimated = true;
+  }
+
+  // A contained component (container, VM, service) drawn as a chip inside its host.
+  function chipNode(child, rel, hitSet) {
+    let cls = "chip";
+    if (child.id === state.selectedComp) cls += " selected";
+    if (hitSet) cls += hitSet.has(child.id) ? " hit" : " dim";
+    const g = svgEl("g", { class: cls, transform: `translate(${rel.x},${rel.y})`, tabindex: 0, role: "button", "data-id": child.id });
+    const title = svgEl("title");
+    title.textContent = nodeTitle(child);
+    g.append(title);
+    g.append(svgEl("rect", { class: "chip-box", width: rel.w, height: rel.h, rx: 6 }));
+    const icon = svgEl("g", { transform: "translate(5,2) scale(0.5)" });
+    window.SymbolLib.draw(icon, child.symbol || "container", 0, 0, state.symbols.custom);
+    g.append(icon);
+    const label = svgEl("text", { class: "chip-text", x: 34, y: rel.h / 2 + 4 });
+    label.textContent = truncate(child.name, 22);
+    g.append(label);
+    const open = (ev) => {
+      ev.stopPropagation();
+      selectComponent(child.id);
+    };
+    g.addEventListener("click", open);
+    g.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(ev); }
+    });
+    return g;
+  }
+
+  function nodeTitle(comp) {
+    return `${comp.name}${comp.vendor ? " · " + comp.vendor : ""}${comp.model ? " " + comp.model : ""}${comp.os ? " · " + comp.os : ""}`;
   }
 
   // Returns a group holding the symbol, centred at the top of the node box.
@@ -363,9 +428,9 @@
   }
 
   function nodeMeta(comp) {
-    const parts = [comp.vendor, comp.model].filter(Boolean);
+    const parts = [comp.vendor, comp.model, comp.os].filter(Boolean);
     if (parts.length) return parts.join(" · ");
-    return comp.kind + (comp.agent_id ? " · agent " + comp.agent_id : "");
+    return KINDS[comp.kind] || comp.kind || "";
   }
 
   function applyViewBox() {
@@ -542,12 +607,26 @@
     const zone = h("select", { id: "ed-zone" }, ...zoneNames().map((z) =>
       h("option", { value: z, selected: z === comp.zone ? true : null }, z)));
     const agent = h("input", { id: "ed-agent", type: "text", maxlength: 5, value: comp.agent_id || "", placeholder: "es. 001" });
+    const kind = h("select", { id: "ed-kind" }, ...Object.entries(KINDS).map(([k, label]) =>
+      h("option", { value: k, selected: k === comp.kind ? true : null }, label)));
+    const os = h("input", { id: "ed-os", type: "text", maxlength: 80, value: comp.os || "", placeholder: "es. RHEL 9.4" });
+    const hasChildren = childrenOf(comp.id).length > 0;
+    const parentOptions = [h("option", { value: "", selected: !comp.parent ? true : null }, "— elemento autonomo")];
+    for (const c of state.arch.components) {
+      if (c.id === comp.id || c.parent) continue;
+      parentOptions.push(h("option", { value: c.id, selected: c.id === comp.parent ? true : null }, `${c.name} (${c.zone})`));
+    }
+    const parent = h("select", { id: "ed-parent", disabled: hasChildren ? true : null }, ...parentOptions);
     root.append(h("div", { class: "assessment" },
       h("label", { class: "field" }, "Nome", name),
       h("label", { class: "field" }, "Simbolo", sym),
       h("label", { class: "field" }, "Vendor", vendor),
       h("label", { class: "field" }, "Modello", model),
       h("label", { class: "field" }, "Zona", zone),
+      h("label", { class: "field" }, "Tipo", kind),
+      h("label", { class: "field" }, "Sistema operativo", os),
+      h("label", { class: "field" }, "Contenuto in (host)",  parent),
+      hasChildren ? h("p", { class: "muted", text: "Questo elemento ospita altri componenti: non può essere annidato." }) : null,
       h("label", { class: "field" }, "Agent Wazuh (ID)", agent),
       h("div", { class: "row" }, h("button", {
         type: "button", class: "primary",
@@ -641,14 +720,20 @@
   function renderAddComponent() {
     const name = h("input", { id: "new-name", type: "text", maxlength: 120, placeholder: "Nome componente" });
     const sym = h("select", { id: "new-symbol" }, ...symbolOptions("server"));
-    const zone = h("select", { id: "new-zone" }, ...zoneNames().map((z) => h("option", { value: z }, z)));
+    const zone = h("input", { id: "new-zone", type: "text", maxlength: 60, list: "zone-list", value: zoneNames()[0] || "", placeholder: "es. Cloud (esempio)" });
+    const zones = h("datalist", { id: "zone-list" }, ...zoneNames().map((z) => h("option", { value: z })));
     const vendor = h("input", { id: "new-vendor", type: "text", maxlength: 80, placeholder: "Vendor (opzionale)" });
+    const kind = h("select", { id: "new-kind" }, ...Object.entries(KINDS).map(([k, label]) =>
+      h("option", { value: k, selected: k === "server" ? true : null }, label)));
+    const os = h("input", { id: "new-os", type: "text", maxlength: 80, placeholder: "Sistema operativo (opzionale)" });
     return h("details", { class: "upload", open: true },
       h("summary", { text: "Aggiungi componente" }),
       h("label", { class: "field" }, "Nome", name),
+      h("label", { class: "field" }, "Tipo", kind),
       h("label", { class: "field" }, "Simbolo", sym),
-      h("label", { class: "field" }, "Zona", zone),
+      h("label", { class: "field" }, "Zona (es. Cloud)", zone, zones),
       h("label", { class: "field" }, "Vendor", vendor),
+      h("label", { class: "field" }, "Sistema operativo", os),
       h("button", { type: "button", class: "primary", onclick: addComponent }, "Aggiungi"));
   }
 
@@ -724,21 +809,26 @@
   }
 
   function saveComponentFields(id) {
+    const parentId = $("#ed-parent").value;
+    const host = state.arch.components.find((x) => x.id === parentId);
     const values = {
       name: $("#ed-name").value.trim(),
       symbol: $("#ed-symbol").value,
       vendor: $("#ed-vendor").value.trim(),
       model: $("#ed-model").value.trim(),
-      zone: $("#ed-zone").value,
+      os: $("#ed-os").value.trim(),
+      kind: $("#ed-kind").value,
+      zone: host ? host.zone : $("#ed-zone").value,
+      parent: parentId,
       agent_id: $("#ed-agent").value.trim(),
     };
     if (!values.name) { flash("Il nome è obbligatorio.", "error"); return; }
     saveArchitecture((arch) => {
       const c = arch.components.find((x) => x.id === id);
       Object.assign(c, values);
-      if (!c.agent_id) delete c.agent_id;
-      if (!c.vendor) delete c.vendor;
-      if (!c.model) delete c.model;
+      for (const k of ["agent_id", "vendor", "model", "os", "parent"]) {
+        if (!c[k]) delete c[k];
+      }
     }, "Componente salvato.");
   }
 
@@ -758,10 +848,11 @@
       arch.components.push({
         id,
         name,
-        kind: "server",
+        kind: $("#new-kind").value,
         zone: $("#new-zone").value,
         symbol: $("#new-symbol").value,
         vendor: $("#new-vendor").value.trim() || undefined,
+        os: $("#new-os").value.trim() || undefined,
       });
     }, "Componente aggiunto.");
   }

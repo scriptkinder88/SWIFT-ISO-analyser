@@ -57,6 +57,8 @@ type Component struct {
 	Symbol   string   `json:"symbol,omitempty"` // generic symbol or "custom:<id>"
 	Vendor   string   `json:"vendor,omitempty"`
 	Model    string   `json:"model,omitempty"`
+	OS       string   `json:"os,omitempty"`       // e.g. "RHEL 9.4", "Windows Server 2022"
+	Parent   string   `json:"parent,omitempty"`   // host component id when this is a container or VM inside another component
 	AgentID  string   `json:"agent_id,omitempty"` // Wazuh agent id used for discovery
 	Controls []string `json:"controls,omitempty"` // requirement ids mapped to this component
 }

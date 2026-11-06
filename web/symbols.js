@@ -83,6 +83,10 @@
       ["circle", { cx: 35, cy: 24, r: 1.5, class: "sym-accent-fill" }],
       ["circle", { cx: 35, cy: 37, r: 1.5, class: "sym-accent-fill" }],
     ],
+    container: [
+      ["path", { d: "M24 5 L41 14 L41 34 L24 43 L7 34 L7 14 Z", class: "sym-fill" }],
+      ["path", { d: "M7 14 L24 23 L41 14 M24 23 L24 43" }],
+    ],
     application: [
       ["rect", { x: 4, y: 7, width: 40, height: 34, rx: 3, class: "sym-fill" }],
       ["line", { x1: 4, y1: 16, x2: 44, y2: 16 }],
@@ -94,7 +98,7 @@
     server: "Server", firewall: "Firewall", router: "Router", switch: "Switch",
     hsm: "HSM", database: "Database", workstation: "Workstation", cloud: "Cloud",
     internet: "Internet", appliance: "Appliance", loadbalancer: "Load balancer",
-    storage: "Storage", application: "Applicazione",
+    storage: "Storage", application: "Applicazione", container: "Container",
   };
 
   function el(tag, attrs) {

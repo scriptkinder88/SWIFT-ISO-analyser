@@ -68,6 +68,26 @@ func (d Database) Validate() []string {
 		}
 		zones[z.Name] = true
 	}
+	byID := map[string]Component{}
+	for _, c := range d.Architecture.Components {
+		byID[c.ID] = c
+	}
+	for _, c := range d.Architecture.Components {
+		if c.Parent == "" {
+			continue
+		}
+		parent, ok := byID[c.Parent]
+		switch {
+		case !ok:
+			problems = append(problems, "contenitore sconosciuto su "+c.ID+": "+c.Parent)
+		case c.Parent == c.ID:
+			problems = append(problems, "componente contenuto in sé stesso: "+c.ID)
+		case parent.Parent != "":
+			problems = append(problems, "annidamento oltre un livello non supportato: "+c.ID)
+		case parent.Zone != c.Zone:
+			problems = append(problems, "il contenuto "+c.ID+" deve stare nella stessa zona del contenitore "+parent.ID)
+		}
+	}
 	for _, c := range d.Architecture.Components {
 		if !d.ValidSymbol(c.Symbol) {
 			problems = append(problems, "simbolo non valido su "+c.ID+": "+c.Symbol)

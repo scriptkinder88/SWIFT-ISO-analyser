@@ -59,3 +59,25 @@ func TestStatusForPrefersComponentOverGlobal(t *testing.T) {
 		t.Fatalf("expected not assessed, got %s", st)
 	}
 }
+
+func TestValidateContainerNesting(t *testing.T) {
+	db := loadSeed(t)
+	db.Architecture.Components = append(db.Architecture.Components,
+		model.Component{ID: "k8s", Name: "Nodo K8s", Kind: "vm", Zone: "Zona SWIFT", Symbol: "server", OS: "RHEL 9.4"},
+		model.Component{ID: "api", Name: "API messaggi", Kind: "container", Zone: "Zona SWIFT", Symbol: "container", Parent: "k8s"},
+	)
+	if problems := db.Validate(); len(problems) > 0 {
+		t.Fatalf("valid nesting rejected: %v", problems)
+	}
+
+	db.Architecture.Components[len(db.Architecture.Components)-1].Parent = "api"
+	if problems := db.Validate(); len(problems) == 0 {
+		t.Fatal("self-containment not rejected")
+	}
+
+	db.Architecture.Components[len(db.Architecture.Components)-1].Parent = "swift-db"
+	db.Architecture.Components[len(db.Architecture.Components)-2].Parent = "api"
+	if problems := db.Validate(); len(problems) == 0 {
+		t.Fatal("two-level nesting not rejected")
+	}
+}

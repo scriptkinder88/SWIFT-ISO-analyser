@@ -4,11 +4,11 @@ package model
 // referenced as "custom:<id>".
 var GenericSymbols = []string{
 	"server", "firewall", "router", "switch", "hsm", "database", "workstation",
-	"cloud", "internet", "appliance", "loadbalancer", "storage", "application",
+	"cloud", "internet", "appliance", "loadbalancer", "storage", "application", "container",
 }
 
 // Network types drive the line style and zone colour in the map.
-var NetworkTypes = []string{"internet", "dmz", "swift", "internal", "management", "backup"}
+var NetworkTypes = []string{"internet", "dmz", "swift", "internal", "management", "backup", "cloud"}
 
 // CustomSymbol is an uploaded vendor symbol. SVG is stored already sanitized.
 type CustomSymbol struct {

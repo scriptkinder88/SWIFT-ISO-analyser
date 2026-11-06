@@ -304,3 +304,12 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--brand
 
 .link-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; margin: 6px 0; }
 .link-row select { width: 170px; flex: 0 0 170px; }
+
+/* contained components (containers, VMs) inside their host */
+.chip .chip-box { fill: var(--surface); stroke: var(--sym-accent); stroke-width: 1.2; }
+.chip .chip-text { fill: var(--text); font-size: 12px; }
+.chip { cursor: pointer; }
+.chip.selected .chip-box { stroke-width: 2.4; stroke: var(--accent); }
+.chip.hit .chip-box { stroke: var(--ok); stroke-width: 2; }
+.chip.dim { opacity: .3; }
+.chip .sym rect, .chip .sym line, .chip .sym path, .chip .sym circle, .chip .sym ellipse { stroke-width: 2.4; }
