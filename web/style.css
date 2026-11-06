@@ -313,3 +313,29 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--brand
 .chip.hit .chip-box { stroke: var(--ok); stroke-width: 2; }
 .chip.dim { opacity: .3; }
 .chip .sym rect, .chip .sym line, .chip .sym path, .chip .sym circle, .chip .sym ellipse { stroke-width: 2.4; }
+
+/* ---------- model explorer ---------- */
+#tree-search { margin: 6px 0 8px; }
+.tree-zone { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 10px 0 2px; font-weight: 600; color: var(--brand); font-size: 13px; }
+.tree-row { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: none; background: none; padding: 4px 6px; border-radius: 6px; color: var(--text); font-size: 13px; }
+.tree-row span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-row small { font-size: 11px; }
+.tree-row:hover { background: var(--zone); }
+.tree-row.current { background: var(--zone); outline: 2px solid var(--accent); }
+
+/* ---------- toolbar and layers ---------- */
+.map-tools { flex-wrap: wrap; }
+.map-tools #zoom-level { min-width: 44px; font-variant-numeric: tabular-nums; }
+.layers { display: inline-flex; gap: 10px; margin-left: auto; flex-wrap: wrap; }
+.layers label { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.layers input { width: auto; }
+#map.hide-zones .zone-layer { display: none; }
+#map.hide-link-labels .link-labels { display: none; }
+#map.hide-grid .grid { display: none; }
+#map.hide-badges .badge { display: none; }
+
+/* ---------- semantic zoom: compact labels when zoomed out ---------- */
+#map.lod-compact .node-meta, #map.lod-compact .chip-text { display: none; }
+#map.lod-compact .node-name { font-size: 20px; }
+#map.lod-compact .chip-box { stroke-width: 1.8; }
+.tree-row.tree-child { padding-left: 22px; }

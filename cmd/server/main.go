@@ -77,11 +77,11 @@ func seedDatabase() (model.Database, error) {
 		return db, fmt.Errorf("framework: %w", err)
 	}
 	if err := json.Unmarshal(data.SampleArchitecture, &db.Architecture); err != nil {
-		return db, fmt.Errorf("architettura di esempio: %w", err)
+		return db, fmt.Errorf("sample architecture: %w", err)
 	}
 	db.Inventory = map[string][]model.InventoryItem{}
 	if problems := db.Validate(); len(problems) > 0 {
-		return db, fmt.Errorf("dati di partenza non validi: %v", problems)
+		return db, fmt.Errorf("invalid seed data: %v", problems)
 	}
 	return db, nil
 }

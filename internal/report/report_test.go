@@ -39,7 +39,7 @@ func TestBuildDeckCoversArchitectureControlsAndComponents(t *testing.T) {
 		titles = append(titles, s.Title)
 	}
 	joined := strings.Join(titles, " | ")
-	for _, want := range []string{"Valutazione", "Architettura: componenti", "Controllo 1.4", "Componente: SIEM"} {
+	for _, want := range []string{"Assessment", "Architecture: components", "Control 1.4", "Component: SIEM"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("deck has no slide containing %q; titles: %s", want, joined)
 		}

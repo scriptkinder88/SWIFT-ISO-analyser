@@ -98,7 +98,7 @@
     server: "Server", firewall: "Firewall", router: "Router", switch: "Switch",
     hsm: "HSM", database: "Database", workstation: "Workstation", cloud: "Cloud",
     internet: "Internet", appliance: "Appliance", loadbalancer: "Load balancer",
-    storage: "Storage", application: "Applicazione", container: "Container",
+    storage: "Storage", application: "Application", container: "Container",
   };
 
   function el(tag, attrs) {
@@ -163,9 +163,9 @@
     label(symbol, custom) {
       if (symbol && symbol.startsWith("custom:")) {
         const def = custom && custom[symbol];
-        return def ? def.name : "Simbolo personalizzato";
+        return def ? def.name : "Custom symbol";
       }
-      return LABELS[symbol] || "Applicazione";
+      return LABELS[symbol] || "Application";
     },
   };
 })();

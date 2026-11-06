@@ -1,8 +1,8 @@
 {
-  "name": "Architettura di esempio (dati fittizi)",
+  "name": "Sample architecture (fictitious data)",
   "zones": [
     {
-      "name": "Esterno",
+      "name": "External",
       "network": "internet"
     },
     {
@@ -10,19 +10,19 @@
       "network": "dmz"
     },
     {
-      "name": "Zona SWIFT",
+      "name": "SWIFT zone",
       "network": "swift"
     },
     {
-      "name": "Zona operatori",
+      "name": "Operator zone",
       "network": "internal"
     },
     {
-      "name": "Zona sicurezza",
+      "name": "Security zone",
       "network": "management"
     },
     {
-      "name": "Cloud (esempio)",
+      "name": "Cloud (example)",
       "network": "cloud"
     }
   ],
@@ -31,12 +31,12 @@
       "id": "ext-internet",
       "name": "Internet",
       "kind": "external",
-      "zone": "Esterno",
+      "zone": "External",
       "symbol": "internet"
     },
     {
       "id": "fw-edge",
-      "name": "Firewall perimetrale",
+      "name": "Perimeter firewall",
       "kind": "network",
       "zone": "DMZ",
       "symbol": "firewall",
@@ -49,7 +49,7 @@
     },
     {
       "id": "proxy-web",
-      "name": "Proxy di navigazione",
+      "name": "Web proxy",
       "kind": "server",
       "zone": "DMZ",
       "symbol": "server",
@@ -63,7 +63,7 @@
       "id": "swift-gw",
       "name": "SWIFT Alliance Gateway",
       "kind": "application",
-      "zone": "Zona SWIFT",
+      "zone": "SWIFT zone",
       "symbol": "appliance",
       "agent_id": "003",
       "controls": [
@@ -76,9 +76,9 @@
     },
     {
       "id": "swift-db",
-      "name": "Database messaggi",
+      "name": "Message database",
       "kind": "database",
-      "zone": "Zona SWIFT",
+      "zone": "SWIFT zone",
       "symbol": "database",
       "agent_id": "004",
       "controls": [
@@ -89,9 +89,9 @@
     },
     {
       "id": "hsm-1",
-      "name": "HSM firma",
+      "name": "Signing HSM",
       "kind": "hsm",
-      "zone": "Zona SWIFT",
+      "zone": "SWIFT zone",
       "symbol": "hsm",
       "controls": [
         "5.1.1"
@@ -99,9 +99,9 @@
     },
     {
       "id": "ws-op",
-      "name": "Workstation operatore",
+      "name": "Operator workstation",
       "kind": "workstation",
-      "zone": "Zona operatori",
+      "zone": "Operator zone",
       "symbol": "workstation",
       "agent_id": "005",
       "controls": [
@@ -114,7 +114,7 @@
       "id": "siem",
       "name": "SIEM / Wazuh manager",
       "kind": "server",
-      "zone": "Zona sicurezza",
+      "zone": "Security zone",
       "symbol": "server",
       "controls": [
         "6.4.1",
@@ -124,9 +124,9 @@
     },
     {
       "id": "scanner",
-      "name": "Scanner vulnerabilità",
+      "name": "Vulnerability scanner",
       "kind": "server",
-      "zone": "Zona sicurezza",
+      "zone": "Security zone",
       "symbol": "server",
       "controls": [
         "2.7.1"
@@ -134,18 +134,18 @@
     },
     {
       "id": "k8s-node",
-      "name": "Nodo applicativo cloud",
+      "name": "Cloud application node",
       "kind": "vm",
-      "zone": "Cloud (esempio)",
+      "zone": "Cloud (example)",
       "symbol": "server",
       "os": "RHEL 9.4",
       "agent_id": "006"
     },
     {
       "id": "ctr-api",
-      "name": "API messaggi",
+      "name": "Message API",
       "kind": "container",
-      "zone": "Cloud (esempio)",
+      "zone": "Cloud (example)",
       "symbol": "container",
       "parent": "k8s-node",
       "controls": [
@@ -154,9 +154,9 @@
     },
     {
       "id": "ctr-recon",
-      "name": "Riconciliazione",
+      "name": "Reconciliation",
       "kind": "container",
-      "zone": "Cloud (esempio)",
+      "zone": "Cloud (example)",
       "symbol": "container",
       "parent": "k8s-node"
     }
@@ -171,43 +171,43 @@
     {
       "from": "fw-edge",
       "to": "proxy-web",
-      "label": "HTTP/S filtrato",
+      "label": "filtered HTTP/S",
       "network": "dmz"
     },
     {
       "from": "ws-op",
       "to": "swift-gw",
-      "label": "sessione operatore",
+      "label": "operator session",
       "network": "swift"
     },
     {
       "from": "swift-gw",
       "to": "swift-db",
-      "label": "messaggi",
+      "label": "messages",
       "network": "swift"
     },
     {
       "from": "swift-gw",
       "to": "hsm-1",
-      "label": "firma",
+      "label": "signing",
       "network": "swift"
     },
     {
       "from": "swift-gw",
       "to": "proxy-web",
-      "label": "aggiornamenti",
+      "label": "updates",
       "network": "dmz"
     },
     {
       "from": "swift-gw",
       "to": "siem",
-      "label": "log (Wazuh agent)",
+      "label": "logs (Wazuh agent)",
       "network": "management"
     },
     {
       "from": "scanner",
       "to": "swift-gw",
-      "label": "scansione",
+      "label": "scan",
       "network": "management"
     },
     {
@@ -219,7 +219,7 @@
     {
       "from": "ctr-api",
       "to": "ctr-recon",
-      "label": "eventi",
+      "label": "events",
       "network": "cloud"
     }
   ]

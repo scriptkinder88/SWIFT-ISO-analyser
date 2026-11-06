@@ -63,8 +63,8 @@ func TestStatusForPrefersComponentOverGlobal(t *testing.T) {
 func TestValidateContainerNesting(t *testing.T) {
 	db := loadSeed(t)
 	db.Architecture.Components = append(db.Architecture.Components,
-		model.Component{ID: "k8s", Name: "Nodo K8s", Kind: "vm", Zone: "Zona SWIFT", Symbol: "server", OS: "RHEL 9.4"},
-		model.Component{ID: "api", Name: "API messaggi", Kind: "container", Zone: "Zona SWIFT", Symbol: "container", Parent: "k8s"},
+		model.Component{ID: "k8s", Name: "K8s node", Kind: "vm", Zone: "SWIFT zone", Symbol: "server", OS: "RHEL 9.4"},
+		model.Component{ID: "api", Name: "Message API", Kind: "container", Zone: "SWIFT zone", Symbol: "container", Parent: "k8s"},
 	)
 	if problems := db.Validate(); len(problems) > 0 {
 		t.Fatalf("valid nesting rejected: %v", problems)

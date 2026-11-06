@@ -53,10 +53,10 @@ type Result struct {
 // Sanitize validates and cleans an uploaded SVG document.
 func Sanitize(raw string) (Result, error) {
 	if len(raw) == 0 {
-		return Result{}, errors.New("file SVG vuoto")
+		return Result{}, errors.New("empty SVG file")
 	}
 	if len(raw) > MaxBytes {
-		return Result{}, fmt.Errorf("file SVG troppo grande (max %d KB)", MaxBytes>>10)
+		return Result{}, fmt.Errorf("SVG file is too large (max %d KB)", MaxBytes>>10)
 	}
 	dec := xml.NewDecoder(strings.NewReader(raw))
 	dec.Strict = true
@@ -73,14 +73,14 @@ func Sanitize(raw string) (Result, error) {
 			break
 		}
 		if err != nil {
-			return Result{}, fmt.Errorf("SVG non valido: %w", err)
+			return Result{}, fmt.Errorf("invalid SVG: %w", err)
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
 			depth++
 			if depth == 1 {
 				if t.Name.Local != "svg" || (t.Name.Space != "" && t.Name.Space != svgNS) {
-					return Result{}, errors.New("il file deve avere come radice <svg>")
+					return Result{}, errors.New("the root element must be <svg>")
 				}
 				for _, a := range t.Attr {
 					if a.Name.Local == "viewBox" && a.Name.Space == "" {
@@ -88,7 +88,7 @@ func Sanitize(raw string) (Result, error) {
 					}
 				}
 				if !viewBoxRe.MatchString(viewBox) {
-					return Result{}, errors.New("l'SVG deve avere un attributo viewBox numerico, es. \"0 0 48 48\"")
+					return Result{}, errors.New("the SVG needs a numeric viewBox attribute, e.g. \"0 0 48 48\"")
 				}
 				out.WriteString(`<svg xmlns="` + svgNS + `" viewBox="` + viewBox + `">`)
 				continue
@@ -99,7 +99,7 @@ func Sanitize(raw string) (Result, error) {
 			}
 			elements++
 			if elements > maxElements {
-				return Result{}, errors.New("SVG troppo complesso")
+				return Result{}, errors.New("SVG is too complex")
 			}
 			name := t.Name.Local
 			if (t.Name.Space != "" && t.Name.Space != svgNS) || !allowedElements[name] {
@@ -139,7 +139,7 @@ func Sanitize(raw string) (Result, error) {
 		}
 	}
 	if depth != 0 || !strings.HasSuffix(out.String(), "</svg>") {
-		return Result{}, errors.New("SVG incompleto")
+		return Result{}, errors.New("SVG is incomplete")
 	}
 	return Result{ViewBox: viewBox, SVG: out.String()}, nil
 }

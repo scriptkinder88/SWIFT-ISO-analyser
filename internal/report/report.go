@@ -17,17 +17,17 @@ const rowsPerSlide = 11
 // BuildDeck returns the slides: cover, architecture, flows, one or more slides
 // per control, and one slide per component with its inventory and assessments.
 func BuildDeck(db model.Database, generated time.Time) []pptx.Slide {
-	footer := fmt.Sprintf("%s · generato il %s · BOZZA da verificare con il CSCF corrente",
+	footer := fmt.Sprintf("%s · generated %s · DRAFT: verify against the current CSCF",
 		db.Architecture.Name, generated.Format("2006-01-02"))
 	var slides []pptx.Slide
 
 	slides = append(slides, pptx.Slide{
-		Title: "Valutazione " + db.Framework.Name,
+		Title: "Assessment: " + db.Framework.Name,
 		Bullets: []string{
-			"Architettura: " + db.Architecture.Name,
-			fmt.Sprintf("Componenti: %d · Flussi: %d", len(db.Architecture.Components), len(db.Architecture.Edges)),
-			fmt.Sprintf("Requisiti nel framework: %d", countRequirements(db.Framework)),
-			"Documento di lavoro per l'auditor: gli esiti sono una proposta, non una dichiarazione di conformità.",
+			"Architecture: " + db.Architecture.Name,
+			fmt.Sprintf("Components: %d · Links: %d", len(db.Architecture.Components), len(db.Architecture.Edges)),
+			fmt.Sprintf("Requirements in framework: %d", countRequirements(db.Framework)),
+			"Working document for the auditor: results are a proposal, not a statement of compliance.",
 		},
 		Footer: footer,
 	})
@@ -41,7 +41,7 @@ func BuildDeck(db model.Database, generated time.Time) []pptx.Slide {
 		}
 		archRows = append(archRows, []string{c.Name, c.Kind, c.Zone, agent, fmt.Sprint(len(c.Controls))})
 	}
-	for _, s := range chunk("Architettura: componenti", []string{"Componente", "Tipo", "Zona", "Agent Wazuh", "Requisiti mappati"},
+	for _, s := range chunk("Architecture: components", []string{"Component", "Type", "Zone", "Wazuh agent", "Mapped requirements"},
 		archRows, []int{3, 2, 2, 1, 1}, footer) {
 		slides = append(slides, s)
 	}
@@ -56,7 +56,7 @@ func BuildDeck(db model.Database, generated time.Time) []pptx.Slide {
 		flowRows = append(flowRows, []string{nameOf[e.From], nameOf[e.To], e.Label})
 	}
 	if len(flowRows) > 0 {
-		for _, s := range chunk("Architettura: flussi di dati", []string{"Da", "A", "Descrizione"}, flowRows, []int{3, 3, 3}, footer) {
+		for _, s := range chunk("Architecture: data flows", []string{"From", "To", "Description"}, flowRows, []int{3, 3, 3}, footer) {
 			slides = append(slides, s)
 		}
 	}
@@ -68,14 +68,14 @@ func BuildDeck(db model.Database, generated time.Time) []pptx.Slide {
 			status, _ := db.StatusFor(req.ID, "")
 			mandatory := "advisory"
 			if req.Mandatory {
-				mandatory = "obbligatorio"
+				mandatory = "mandatory"
 			}
 			rows = append(rows, []string{
 				req.ID, req.Text, mandatory, label(status), fmt.Sprint(len(db.ComponentsFor(req.ID))),
 			})
 		}
-		title := fmt.Sprintf("Controllo %s · %s", ctl.ID, ctl.Title)
-		for _, s := range chunk(title, []string{"Sotto-punto", "Requisito", "Tipo", "Esito globale", "Componenti"},
+		title := fmt.Sprintf("Control %s · %s", ctl.ID, ctl.Title)
+		for _, s := range chunk(title, []string{"Requirement", "Description", "Type", "Global result", "Components"},
 			rows, []int{1, 5, 2, 2, 2}, footer) {
 			slides = append(slides, s)
 		}
@@ -86,16 +86,16 @@ func BuildDeck(db model.Database, generated time.Time) []pptx.Slide {
 	sort.SliceStable(comps, func(i, j int) bool { return comps[i].Name < comps[j].Name })
 	for _, c := range comps {
 		bullets := []string{
-			fmt.Sprintf("Tipo: %s · Zona: %s", c.Kind, c.Zone),
+			fmt.Sprintf("Type: %s · Zone: %s", c.Kind, c.Zone),
 		}
 		if c.OS != "" {
-			bullets = append(bullets, "Sistema operativo: "+c.OS)
+			bullets = append(bullets, "Operating system: "+c.OS)
 		}
 		if c.Parent != "" {
-			bullets = append(bullets, "Ospitato in: "+nameOf[c.Parent])
+			bullets = append(bullets, "Hosted in: "+nameOf[c.Parent])
 		}
 		if c.AgentID != "" {
-			bullets = append(bullets, "Agent Wazuh: "+c.AgentID)
+			bullets = append(bullets, "Wazuh agent: "+c.AgentID)
 		}
 		bullets = append(bullets, inventorySummary(db.Inventory[c.ID])...)
 
@@ -105,18 +105,18 @@ func BuildDeck(db model.Database, generated time.Time) []pptx.Slide {
 			rows = append(rows, []string{reqID, label(status), truncate(rationale, 90)})
 		}
 		if len(rows) == 0 {
-			bullets = append(bullets, "Nessun requisito mappato su questo componente.")
+			bullets = append(bullets, "No requirement mapped to this component.")
 		}
 		var tbl *pptx.Table
 		if len(rows) > 0 {
 			tbl = &pptx.Table{
-				Header:     []string{"Sotto-punto", "Esito", "Motivazione"},
+				Header:     []string{"Requirement", "Result", "Rationale"},
 				Rows:       rows,
 				ColWeights: []int{1, 2, 5},
 			}
 		}
 		slides = append(slides, pptx.Slide{
-			Title:   "Componente: " + c.Name,
+			Title:   "Component: " + c.Name,
 			Bullets: bullets,
 			Table:   tbl,
 			Footer:  footer,
@@ -130,7 +130,7 @@ func chunk(title string, header []string, rows [][]string, weights []int, footer
 	if len(rows) == 0 {
 		return []pptx.Slide{{
 			Title:   title,
-			Bullets: []string{"Nessun dato disponibile."},
+			Bullets: []string{"No data available."},
 			Footer:  footer,
 		}}
 	}
@@ -155,7 +155,7 @@ func chunk(title string, header []string, rows [][]string, weights []int, footer
 
 func inventorySummary(items []model.InventoryItem) []string {
 	if len(items) == 0 {
-		return []string{"Inventory: nessun dato (eseguire la sincronizzazione Wazuh o inserire i dati manualmente)."}
+		return []string{"Inventory: no data (run the Wazuh sync or enter data manually)."}
 	}
 	counts := map[string]int{}
 	var hw, os string
@@ -164,7 +164,7 @@ func inventorySummary(items []model.InventoryItem) []string {
 		switch it.Category {
 		case "hardware":
 			if hw == "" {
-				hw = fmt.Sprintf("CPU %s · RAM %s · seriale %s",
+				hw = fmt.Sprintf("CPU %s · RAM %s · serial %s",
 					it.Fields["cpu.name"], it.Fields["ram.total"], it.Fields["board_serial"])
 			}
 		case "os":
@@ -179,24 +179,24 @@ func inventorySummary(items []model.InventoryItem) []string {
 		out = append(out, "Hardware: "+hw)
 	}
 	if os != "" {
-		out = append(out, "Sistema operativo: "+os)
+		out = append(out, "Operating system: "+os)
 	}
-	out = append(out, fmt.Sprintf("Pacchetti: %d · Porte in ascolto: %d", counts["packages"], counts["ports"]))
+	out = append(out, fmt.Sprintf("Packages: %d · Listening ports: %d", counts["packages"], counts["ports"]))
 	return out
 }
 
 func label(s model.Status) string {
 	switch s {
 	case model.StatusCompliant:
-		return "Conforme"
+		return "Compliant"
 	case model.StatusPartial:
-		return "Parziale"
+		return "Partial"
 	case model.StatusNonCompliant:
-		return "Non conforme"
+		return "Non-compliant"
 	case model.StatusNotApplicable:
 		return "N/A"
 	default:
-		return "Da valutare"
+		return "Not assessed"
 	}
 }
 

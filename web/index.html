@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,38 +10,51 @@
   <header class="topbar">
     <h1>SWIFT ISO Analyser</h1>
     <div class="actions">
-      <button id="btn-sync" type="button" title="Legge inventory dagli agent Wazuh">Sincronizza Wazuh</button>
-      <a id="btn-export" class="button" href="/api/report.pptx" download>Scarica PowerPoint</a>
+      <button id="btn-sync" type="button" title="Read component inventory from Wazuh agents">Sync Wazuh</button>
+      <a id="btn-export" class="button" href="/api/report.pptx" download>Download PowerPoint</a>
     </div>
     <p id="message" class="message" role="status" aria-live="polite"></p>
   </header>
 
   <main class="layout">
-    <aside class="sidebar" aria-label="Framework e simboli">
-      <h2>Framework</h2>
-      <p id="framework-meta" class="muted"></p>
-      <div id="controls"></div>
+    <aside class="sidebar" aria-label="Model and framework">
       <details class="library" open>
-        <summary>Libreria simboli</summary>
+        <summary>Model explorer</summary>
+        <input id="tree-search" type="search" placeholder="Filter components…" autocomplete="off" aria-label="Filter components">
+        <div id="tree"></div>
+      </details>
+      <details class="library" open>
+        <summary>Framework</summary>
+        <p id="framework-meta" class="muted"></p>
+        <div id="controls"></div>
+      </details>
+      <details class="library">
+        <summary>Symbol library</summary>
         <div id="symbol-library"></div>
       </details>
     </aside>
 
-    <section class="map-wrap" aria-label="Schema architettura">
-      <div class="map-tools">
-        <button type="button" id="zoom-in" aria-label="Zoom avanti">+</button>
-        <button type="button" id="zoom-out" aria-label="Zoom indietro">−</button>
-        <button type="button" id="zoom-reset">Reset</button>
-        <span class="muted">Trascina per spostarti, rotella per lo zoom. Clic su un componente o un sotto-punto.</span>
+    <section class="map-wrap" aria-label="Architecture diagram">
+      <div class="map-tools" role="toolbar" aria-label="Diagram tools">
+        <button type="button" id="zoom-in" aria-label="Zoom in" title="Zoom in (+)">+</button>
+        <button type="button" id="zoom-out" aria-label="Zoom out" title="Zoom out (−)">−</button>
+        <button type="button" id="zoom-fit" title="Fit diagram (F)">Fit</button>
+        <span id="zoom-level" class="muted" aria-live="off">100%</span>
+        <span class="layers" role="group" aria-label="Layers">
+          <label><input type="checkbox" data-layer="zones" checked> Zones</label>
+          <label><input type="checkbox" data-layer="linkLabels" checked> Link labels</label>
+          <label><input type="checkbox" data-layer="grid" checked> Grid</label>
+          <label><input type="checkbox" data-layer="badges" checked> Status</label>
+        </span>
       </div>
-      <svg id="map" role="img" aria-label="Schema dell'architettura"></svg>
-      <div class="legend" id="legend" aria-label="Legenda tipi di rete"></div>
+      <svg id="map" role="img" aria-label="Architecture diagram"></svg>
+      <div class="legend" id="legend" aria-label="Network type legend"></div>
     </section>
 
-    <aside class="panel" id="panel" aria-label="Dettaglio">
+    <aside class="panel" id="panel" aria-label="Details">
       <label class="field">
         Auditor
-        <input id="auditor" type="text" maxlength="120" placeholder="Nome e cognome" autocomplete="off">
+        <input id="auditor" type="text" maxlength="120" placeholder="Name and surname" autocomplete="off">
       </label>
       <div id="detail"></div>
     </aside>

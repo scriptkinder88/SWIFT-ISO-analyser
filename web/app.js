@@ -1,5 +1,5 @@
-// SWIFT ISO Analyser: architecture drawing, symbol library, auditor panel.
-// Plain DOM and SVG, no dependencies. Symbols come from symbols.js.
+// SWIFT ISO Analyser: architecture diagram, model explorer, symbol library and
+// auditor panel. Plain DOM and SVG, no dependencies. Symbols come from symbols.js.
 (() => {
   "use strict";
 
@@ -11,36 +11,37 @@
   const PAD = 60;
   const BAND_HEAD = 58;
   const MAX_COLS = 4;
-  const MAX_SVG_BYTES = 64 * 1024;
   const CHIP_H = 28;
   const CHIP_GAP = 6;
-
-  const KINDS = {
-    server: "Server fisico", vm: "Macchina virtuale", container: "Container",
-    application: "Applicazione", database: "Database", network: "Apparato di rete",
-    hsm: "HSM", workstation: "Workstation", storage: "Storage",
-    "cloud-service": "Servizio cloud", external: "Esterno",
-  };
+  const MAX_SVG_BYTES = 64 * 1024;
+  const DETAIL_ZOOM = 0.8; // below this zoom the diagram shows compact labels
 
   const STATUSES = [
-    ["non_valutato", "Da valutare"],
-    ["conforme", "Conforme"],
-    ["parzialmente_conforme", "Parzialmente conforme"],
-    ["non_conforme", "Non conforme"],
-    ["non_applicabile", "Non applicabile"],
+    ["non_valutato", "Not assessed"],
+    ["conforme", "Compliant"],
+    ["parzialmente_conforme", "Partially compliant"],
+    ["non_conforme", "Non-compliant"],
+    ["non_applicabile", "Not applicable"],
   ];
+
+  const KINDS = {
+    server: "Physical server", vm: "Virtual machine", container: "Container",
+    application: "Application", database: "Database", network: "Network device",
+    hsm: "HSM", workstation: "Workstation", storage: "Storage",
+    "cloud-service": "Cloud service", external: "External",
+  };
 
   // Line style per network type: colour, width, dash pattern.
   const NETWORKS = {
-    internet:   { label: "Internet / non fidata", color: "#c62828", width: 2,   dash: "" },
-    dmz:        { label: "DMZ",                  color: "#ef6c00", width: 2,   dash: "8 4" },
-    swift:      { label: "Zona SWIFT",           color: "#1f3864", width: 4,   dash: "" },
-    internal:   { label: "Rete interna",         color: "#546e7a", width: 1.5, dash: "" },
-    management: { label: "Gestione / sicurezza", color: "#2e7d32", width: 1.5, dash: "2 3" },
-    backup:     { label: "Backup",               color: "#6a1b9a", width: 1.5, dash: "10 3 2 3" },
-    cloud:      { label: "Cloud",                color: "#0288d1", width: 1.8, dash: "12 4 2 4" },
+    internet:   { label: "Internet / untrusted", color: "#c62828", width: 2,   dash: "" },
+    dmz:        { label: "DMZ",                 color: "#ef6c00", width: 2,   dash: "8 4" },
+    swift:      { label: "SWIFT zone",          color: "#1f3864", width: 4,   dash: "" },
+    internal:   { label: "Internal network",    color: "#546e7a", width: 1.5, dash: "" },
+    management: { label: "Management / security", color: "#2e7d32", width: 1.5, dash: "2 3" },
+    backup:     { label: "Backup",              color: "#6a1b9a", width: 1.5, dash: "10 3 2 3" },
+    cloud:      { label: "Cloud",               color: "#0288d1", width: 1.8, dash: "12 4 2 4" },
   };
-  const DEFAULT_NET = { label: "Non classificata", color: "#7f8a99", width: 1.5, dash: "" };
+  const DEFAULT_NET = { label: "Unclassified", color: "#7f8a99", width: 1.5, dash: "" };
 
   const state = {
     framework: null,
@@ -52,6 +53,7 @@
     inventory: {},
     view: { zoom: 1, x: 0, y: 0, w: 1000, h: 600 },
     mapAnimated: false,
+    layout: null,
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -100,7 +102,7 @@
 
   function statusLabel(code) {
     const found = STATUSES.find(([c]) => c === code);
-    return found ? found[1] : "Da valutare";
+    return found ? found[1] : "Not assessed";
   }
 
   function dotClass(st) {
@@ -148,6 +150,10 @@
     return state.arch.components.filter((c) => (c.controls || []).includes(reqId));
   }
 
+  function childrenOf(id) {
+    return state.arch.components.filter((c) => c.parent === id);
+  }
+
   function nodeStatus(comp) {
     const reqs = comp.controls || [];
     if (reqs.length === 0) return "none";
@@ -170,6 +176,13 @@
     return (state.arch.zones || []).find((z) => z.name === name) || null;
   }
 
+  function zoneNames() {
+    const names = [];
+    for (const z of state.arch.zones || []) names.push(z.name);
+    for (const c of state.arch.components) if (!names.includes(c.zone)) names.push(c.zone);
+    return names;
+  }
+
   function symbolOptions(current) {
     const opts = state.symbols.generic.map((g) =>
       h("option", { value: g, selected: g === current ? true : null }, window.SymbolLib.LABELS[g] || g));
@@ -181,13 +194,19 @@
     return opts;
   }
 
-  // ---------- layout ----------
-
-  function childrenOf(id) {
-    return state.arch.components.filter((c) => c.parent === id);
+  function nodeMeta(comp) {
+    const parts = [comp.vendor, comp.model, comp.os].filter(Boolean);
+    if (parts.length) return parts.join(" · ");
+    return KINDS[comp.kind] || comp.kind || "";
   }
 
-  // Height of a top-level component box: grows with the containers it hosts.
+  function nodeTitle(comp) {
+    return `${comp.name}${comp.vendor ? " · " + comp.vendor : ""}${comp.model ? " " + comp.model : ""}${comp.os ? " · " + comp.os : ""}`;
+  }
+
+  // ---------- layout ----------
+
+  // Height of a top-level box: grows with the containers it hosts.
   function boxHeight(comp) {
     const n = childrenOf(comp.id).length;
     return n ? NODE_H + 10 + n * (CHIP_H + CHIP_GAP) + 4 : NODE_H;
@@ -232,8 +251,6 @@
     return { zones, pos, w, h, bands };
   }
 
-  // ---------- map ----------
-
   function edgePath(a, b) {
     const ax = a.x, ay = a.y, bx = b.x, by = b.y;
     const acx = ax + a.w / 2, bcx = bx + b.w / 2;
@@ -260,15 +277,14 @@
     return { d: `M${sx},${sy} C${c1x},${c1y} ${c2x},${c2y} ${ex},${ey}`, mid };
   }
 
+  // ---------- diagram ----------
+
   function buildDefs(svg) {
     const defs = svgEl("defs");
-    // paper grid, drawing-style background
     const pattern = svgEl("pattern", { id: "grid", width: 24, height: 24, patternUnits: "userSpaceOnUse" });
     pattern.append(svgEl("circle", { cx: 1, cy: 1, r: 1, class: "grid-dot" }));
     defs.append(pattern);
-    // one arrow marker per network type, coloured like its line
-    const keys = [...Object.keys(NETWORKS), "none"];
-    for (const key of keys) {
+    for (const key of [...Object.keys(NETWORKS), "none"]) {
       const st = key === "none" ? DEFAULT_NET : NETWORKS[key];
       const marker = svgEl("marker", {
         id: "arrow-" + key, viewBox: "0 0 10 10", refX: 9, refY: 5,
@@ -286,42 +302,41 @@
     if (!state.arch) return;
 
     const layout = computeLayout();
+    state.layout = layout;
     const { pos, w, h, bands } = layout;
     const box = svg.getBoundingClientRect();
     const aspect = box.width > 0 && box.height > 0 ? box.height / box.width : h / w;
     const viewH = Math.max(h, w * aspect);
     state.view.w = w;
     state.view.h = viewH;
-    state.view.x = 0;
-    state.view.y = -(viewH - h) / 2;
-    state.view.zoom = 1;
+    if (!state.fitted) fitView();
     applyViewBox();
 
     buildDefs(svg);
     svg.append(svgEl("rect", { class: "paper", x: -5000, y: -5000, width: 10000, height: 10000 }));
     svg.append(svgEl("rect", { class: "grid", x: -5000, y: -5000, width: 10000, height: 10000 }));
 
-    // zones
+    const zoneLayer = svgEl("g", { class: "zone-layer" });
     for (const b of bands) {
       const info = zoneInfo(b.zone);
       const st = netStyle(info ? info.network : "");
-      svg.append(svgEl("rect", {
+      zoneLayer.append(svgEl("rect", {
         class: "zone", x: b.x, y: b.y, width: b.w, height: b.h, rx: 10,
         stroke: st.color, "stroke-dasharray": "12 6",
       }));
       const text = b.zone;
       const tabW = Math.min(b.w + 40, 28 + text.length * 8.6);
-      svg.append(svgEl("rect", { class: "zone-tab", x: b.x + 12, y: b.y - 12, width: tabW, height: 24, rx: 4, stroke: st.color }));
+      zoneLayer.append(svgEl("rect", { class: "zone-tab", x: b.x + 12, y: b.y - 12, width: tabW, height: 24, rx: 4, stroke: st.color }));
       const label = svgEl("text", { class: "zone-label", x: b.x + 22, y: b.y + 4 });
       label.textContent = text;
-      svg.append(label);
+      zoneLayer.append(label);
     }
+    svg.append(zoneLayer);
 
     const hitSet = state.selectedReq ? new Set(componentsFor(state.selectedReq).map((c) => c.id)) : null;
 
-    // links
     const linkLayer = svgEl("g");
-    const labelLayer = svgEl("g");
+    const labelLayer = svgEl("g", { class: "link-labels" });
     for (const e of state.arch.edges) {
       const a = pos[e.from];
       const b = pos[e.to];
@@ -345,7 +360,7 @@
     }
     svg.append(linkLayer, labelLayer);
 
-    // nodes: top-level components; contained components are drawn as chips inside
+    // top-level components as boxes; contained components as chips inside them
     const nodeLayer = svgEl("g");
     const topLevel = state.arch.components.filter((c) => !c.parent);
     topLevel.forEach((comp, index) => {
@@ -385,8 +400,9 @@
       nodeLayer.append(g);
     });
     svg.append(nodeLayer);
-    state.mapAnimated = true;    svg.append(nodeLayer);
     state.mapAnimated = true;
+    applyLayers();
+    $("#zoom-level").textContent = Math.round(state.view.zoom * 100) + "%";
   }
 
   // A contained component (container, VM, service) drawn as a chip inside its host.
@@ -416,38 +432,67 @@
     return g;
   }
 
-  function nodeTitle(comp) {
-    return `${comp.name}${comp.vendor ? " · " + comp.vendor : ""}${comp.model ? " " + comp.model : ""}${comp.os ? " · " + comp.os : ""}`;
-  }
-
-  // Returns a group holding the symbol, centred at the top of the node box.
+  // Returns the symbol nodes, centred at the top of the box.
   function symbolNodes(comp) {
     const holder = svgEl("g");
     window.SymbolLib.draw(holder, comp.symbol || "appliance", (NODE_W - window.SymbolLib.SIZE) / 2, 8, state.symbols.custom);
     return [...holder.childNodes];
   }
 
-  function nodeMeta(comp) {
-    const parts = [comp.vendor, comp.model, comp.os].filter(Boolean);
-    if (parts.length) return parts.join(" · ");
-    return KINDS[comp.kind] || comp.kind || "";
-  }
-
   function applyViewBox() {
     const v = state.view;
     $("#map").setAttribute("viewBox", `${v.x} ${v.y} ${v.w / v.zoom} ${v.h / v.zoom}`);
+    const svg = $("#map");
+    // semantic zoom: compact labels when zoomed out
+    svg.classList.toggle("lod-compact", v.zoom < DETAIL_ZOOM);
+    const zl = $("#zoom-level");
+    if (zl) zl.textContent = Math.round(v.zoom * 100) + "%";
+  }
+
+  function fitView() {
+    const v = state.view;
+    const content = state.layout;
+    v.zoom = 1;
+    v.x = 0;
+    v.y = content ? -(v.h - content.h) / 2 : 0;
+    state.fitted = true;
   }
 
   function setZoom(next) {
-    state.view.zoom = Math.min(3, Math.max(0.4, next));
+    state.view.zoom = Math.min(3, Math.max(0.3, next));
     applyViewBox();
+  }
+
+  // Centres the view on a component (used by the model explorer).
+  function focusComponent(id) {
+    const p = state.layout && state.layout.pos[id];
+    if (!p) return;
+    const v = state.view;
+    const vw = v.w / v.zoom;
+    const vh = v.h / v.zoom;
+    v.x = p.x + p.w / 2 - vw / 2;
+    v.y = p.y + p.h / 2 - vh / 2;
+    applyViewBox();
+  }
+
+  // Layers are toggled with CSS classes on the diagram, so they cost no re-render.
+  function applyLayers() {
+    const svg = $("#map");
+    const on = (key) => {
+      const box = document.querySelector(`[data-layer="${key}"]`);
+      return box ? box.checked : true;
+    };
+    svg.classList.toggle("hide-zones", !on("zones"));
+    svg.classList.toggle("hide-link-labels", !on("linkLabels"));
+    svg.classList.toggle("hide-grid", !on("grid"));
+    svg.classList.toggle("hide-badges", !on("badges"));
   }
 
   function bindMapInteractions() {
     const svg = $("#map");
     let drag = null;
     svg.addEventListener("pointerdown", (ev) => {
-      if (ev.target.closest(".node")) return;
+      if (ev.target.closest(".node, .chip")) return;
       drag = { x: ev.clientX, y: ev.clientY, vx: state.view.x, vy: state.view.y };
       svg.setPointerCapture(ev.pointerId);
     });
@@ -468,8 +513,15 @@
     }, { passive: false });
     $("#zoom-in").addEventListener("click", () => setZoom(state.view.zoom * 1.2));
     $("#zoom-out").addEventListener("click", () => setZoom(state.view.zoom / 1.2));
-    $("#zoom-reset").addEventListener("click", () => {
-      state.view.zoom = 1; state.view.x = 0; state.view.y = 0; applyViewBox();
+    $("#zoom-fit").addEventListener("click", () => { fitView(); applyViewBox(); });
+    document.querySelectorAll("[data-layer]").forEach((box) => box.addEventListener("change", applyLayers));
+
+    document.addEventListener("keydown", (ev) => {
+      if (ev.target.closest("input, select, textarea")) return;
+      if (ev.key === "f" || ev.key === "F") { fitView(); applyViewBox(); }
+      if (ev.key === "+" || ev.key === "=") setZoom(state.view.zoom * 1.2);
+      if (ev.key === "-") setZoom(state.view.zoom / 1.2);
+      if (ev.key === "Escape") { state.selectedComp = null; state.selectedReq = null; refresh(); }
     });
   }
 
@@ -484,6 +536,44 @@
   }
 
   // ---------- sidebar ----------
+
+  // Model explorer: zones → components → contained components, filterable.
+  function renderTree() {
+    const root = $("#tree");
+    root.replaceChildren();
+    if (!state.arch) return;
+    const filter = ($("#tree-search").value || "").trim().toLowerCase();
+    const match = (c) => !filter || c.name.toLowerCase().includes(filter) || (c.vendor || "").toLowerCase().includes(filter);
+    for (const zone of zoneNames()) {
+      const tops = state.arch.components.filter((c) => !c.parent && c.zone === zone);
+      const rows = [];
+      for (const c of tops) {
+        const kids = childrenOf(c.id);
+        if (!match(c) && !kids.some(match)) continue;
+        rows.push(treeRow(c, 0));
+        for (const k of kids) if (match(k) || match(c)) rows.push(treeRow(k, 1));
+      }
+      if (rows.length === 0) continue;
+      const zi = zoneInfo(zone);
+      root.append(h("div", { class: "tree-zone" },
+        h("span", { class: "tree-zone-name", text: zone }),
+        h("small", { class: "muted", text: zi ? netStyle(zi.network).label : "" })));
+      root.append(...rows);
+    }
+    if (!root.childNodes.length) root.append(h("p", { class: "empty", text: "No components match the filter." }));
+  }
+
+  function treeRow(comp, depth) {
+    const st = nodeStatus(comp);
+    return h("button", {
+      type: "button",
+      class: "tree-row" + (depth ? " tree-child" : "") + (comp.id === state.selectedComp ? " current" : ""),
+      onclick: () => { selectComponent(comp.id); focusComponent(comp.id); },
+    },
+      h("i", { class: "dot " + dotClass(st), "aria-hidden": "true" }),
+      h("span", { text: comp.name }),
+      h("small", { class: "muted", text: KINDS[comp.kind] || comp.kind }));
+  }
 
   function renderControls() {
     const root = $("#controls");
@@ -501,7 +591,7 @@
         },
           h("i", { class: "dot " + dotClass(st), "aria-hidden": "true" }),
           h("span", {}, h("strong", { text: r.id + " " }), r.text,
-            h("small", { text: `${statusLabel(st)} · ${mapped} componenti${r.mandatory ? "" : " · advisory"}` })));
+            h("small", { text: `${statusLabel(st)} · ${mapped} component${mapped === 1 ? "" : "s"}${r.mandatory ? "" : " · advisory"}` })));
       });
       root.append(h("details", { class: "control", open: true },
         h("summary", { text: `${control.id} · ${control.title}` }), ...reqs));
@@ -517,58 +607,58 @@
         window.SymbolLib.preview(g, state.symbols.custom),
         h("small", { text: window.SymbolLib.LABELS[g] || g })));
     }
-    root.append(h("p", { class: "muted", text: "Simboli generici" }), grid);
+    root.append(h("p", { class: "muted", text: "Generic symbols" }), grid);
 
     const custom = Object.values(state.symbols.custom);
-    root.append(h("p", { class: "muted", text: custom.length ? "Simboli vendor caricati" : "Nessun simbolo vendor caricato." }));
+    root.append(h("p", { class: "muted", text: custom.length ? "Vendor symbols" : "No vendor symbols uploaded yet." }));
     for (const c of custom) {
       root.append(h("div", { class: "custom-row" },
         window.SymbolLib.preview("custom:" + c.id, state.symbols.custom),
-        h("span", {}, c.name, h("small", { text: c.vendor || "vendor non indicato" })),
-        h("button", { type: "button", class: "small", onclick: () => deleteSymbol(c) }, "Elimina")));
+        h("span", {}, c.name, h("small", { text: c.vendor || "no vendor" })),
+        h("button", { type: "button", class: "small", onclick: () => deleteSymbol(c) }, "Delete")));
     }
 
     const file = h("input", { id: "sym-file", type: "file", accept: ".svg,image/svg+xml" });
-    const name = h("input", { id: "sym-name", type: "text", maxlength: 80, placeholder: "Es. Firewall NGFW-A", autocomplete: "off" });
-    const vendor = h("input", { id: "sym-vendor", type: "text", maxlength: 80, placeholder: "Es. nome del vendor", autocomplete: "off" });
+    const name = h("input", { id: "sym-name", type: "text", maxlength: 80, placeholder: "e.g. NGFW-A firewall", autocomplete: "off" });
+    const vendor = h("input", { id: "sym-vendor", type: "text", maxlength: 80, placeholder: "e.g. vendor name", autocomplete: "off" });
     root.append(h("details", { class: "upload" },
-      h("summary", { text: "Aggiungi simbolo vendor (SVG)" }),
-      h("label", { class: "field" }, "Nome", name),
+      h("summary", { text: "Add vendor symbol (SVG)" }),
+      h("label", { class: "field" }, "Name", name),
       h("label", { class: "field" }, "Vendor", vendor),
-      h("label", { class: "field" }, "File SVG (max 64 KB)", file),
-      h("p", { class: "muted", text: "Usa un disegno tuo o autorizzato: il tool non include loghi di terzi." }),
-      h("button", { type: "button", class: "primary", onclick: uploadSymbol }, "Carica simbolo")));
+      h("label", { class: "field" }, "SVG file (max 64 KB)", file),
+      h("p", { class: "muted", text: "Use your own or licensed artwork: the tool does not ship third-party logos." }),
+      h("button", { type: "button", class: "primary", onclick: uploadSymbol }, "Upload symbol")));
   }
 
   async function uploadSymbol() {
     const file = $("#sym-file").files[0];
     const name = $("#sym-name").value.trim();
-    if (!name) { flash("Indica il nome del simbolo.", "error"); return; }
-    if (!file) { flash("Scegli un file SVG.", "error"); return; }
-    if (file.size > MAX_SVG_BYTES) { flash("File troppo grande (max 64 KB).", "error"); return; }
+    if (!name) { flash("Enter a name for the symbol.", "error"); return; }
+    if (!file) { flash("Choose an SVG file.", "error"); return; }
+    if (file.size > MAX_SVG_BYTES) { flash("File is too large (max 64 KB).", "error"); return; }
     try {
       const svg = await file.text();
       const created = await api("/api/symbols", {
         method: "POST",
         body: JSON.stringify({ name, vendor: $("#sym-vendor").value.trim(), svg }),
       });
-      flash(`Simbolo «${created.name}» caricato e pulito.`, "ok");
+      flash(`Symbol "${created.name}" uploaded and sanitized.`, "ok");
       await loadSymbols();
       refresh();
     } catch (err) {
-      flash("Caricamento non riuscito: " + err.message, "error");
+      flash("Upload failed: " + err.message, "error");
     }
   }
 
   async function deleteSymbol(sym) {
-    if (!window.confirm(`Eliminare il simbolo «${sym.name}»?`)) return;
+    if (!window.confirm(`Delete the symbol "${sym.name}"?`)) return;
     try {
       await api("/api/symbols/" + encodeURIComponent(sym.id), { method: "DELETE" });
-      flash("Simbolo eliminato.", "ok");
+      flash("Symbol deleted.", "ok");
       await loadSymbols();
       refresh();
     } catch (err) {
-      flash("Eliminazione non riuscita: " + err.message, "error");
+      flash("Delete failed: " + err.message, "error");
     }
   }
 
@@ -577,11 +667,11 @@
     state.symbols.generic = res.generic;
     state.symbols.custom = {};
     for (const c of res.custom) {
-      state.symbols.custom["custom:" + c.id] = { ...c, name: c.name, vendor: c.vendor };
+      state.symbols.custom["custom:" + c.id] = { ...c };
     }
   }
 
-  // ---------- panel ----------
+  // ---------- details panel ----------
 
   function renderDetail() {
     const root = $("#detail");
@@ -589,7 +679,7 @@
     if (state.selectedComp) return renderComponentDetail(root);
     if (state.selectedReq) return renderRequirementDetail(root);
     root.append(
-      h("p", { class: "empty", text: "Seleziona un componente nella mappa o un sotto-punto a sinistra." }),
+      h("p", { class: "empty", text: "Select a component on the diagram or in the model explorer, or a requirement on the left." }),
       renderAddComponent(),
       renderAddEdge(),
     );
@@ -600,52 +690,52 @@
     if (!comp) return;
     root.append(h("h3", { text: comp.name }));
 
-    const name = h("input", { id: "ed-name", type: "text", maxlength: 120, value: comp.name });
-    const sym = h("select", { id: "ed-symbol" }, ...symbolOptions(comp.symbol || "appliance"));
-    const vendor = h("input", { id: "ed-vendor", type: "text", maxlength: 80, value: comp.vendor || "" });
-    const model = h("input", { id: "ed-model", type: "text", maxlength: 80, value: comp.model || "" });
-    const zone = h("select", { id: "ed-zone" }, ...zoneNames().map((z) =>
-      h("option", { value: z, selected: z === comp.zone ? true : null }, z)));
-    const agent = h("input", { id: "ed-agent", type: "text", maxlength: 5, value: comp.agent_id || "", placeholder: "es. 001" });
-    const kind = h("select", { id: "ed-kind" }, ...Object.entries(KINDS).map(([k, label]) =>
-      h("option", { value: k, selected: k === comp.kind ? true : null }, label)));
-    const os = h("input", { id: "ed-os", type: "text", maxlength: 80, value: comp.os || "", placeholder: "es. RHEL 9.4" });
     const hasChildren = childrenOf(comp.id).length > 0;
-    const parentOptions = [h("option", { value: "", selected: !comp.parent ? true : null }, "— elemento autonomo")];
+    const parentOptions = [h("option", { value: "", selected: !comp.parent ? true : null }, "— standalone element")];
     for (const c of state.arch.components) {
       if (c.id === comp.id || c.parent) continue;
       parentOptions.push(h("option", { value: c.id, selected: c.id === comp.parent ? true : null }, `${c.name} (${c.zone})`));
     }
-    const parent = h("select", { id: "ed-parent", disabled: hasChildren ? true : null }, ...parentOptions);
     root.append(h("div", { class: "assessment" },
-      h("label", { class: "field" }, "Nome", name),
-      h("label", { class: "field" }, "Simbolo", sym),
-      h("label", { class: "field" }, "Vendor", vendor),
-      h("label", { class: "field" }, "Modello", model),
-      h("label", { class: "field" }, "Zona", zone),
-      h("label", { class: "field" }, "Tipo", kind),
-      h("label", { class: "field" }, "Sistema operativo", os),
-      h("label", { class: "field" }, "Contenuto in (host)",  parent),
-      hasChildren ? h("p", { class: "muted", text: "Questo elemento ospita altri componenti: non può essere annidato." }) : null,
-      h("label", { class: "field" }, "Agent Wazuh (ID)", agent),
+      h("label", { class: "field" }, "Name",
+        h("input", { id: "ed-name", type: "text", maxlength: 120, value: comp.name })),
+      h("label", { class: "field" }, "Type",
+        h("select", { id: "ed-kind" }, ...Object.entries(KINDS).map(([k, label]) =>
+          h("option", { value: k, selected: k === comp.kind ? true : null }, label)))),
+      h("label", { class: "field" }, "Symbol",
+        h("select", { id: "ed-symbol" }, ...symbolOptions(comp.symbol || "appliance"))),
+      h("label", { class: "field" }, "Vendor",
+        h("input", { id: "ed-vendor", type: "text", maxlength: 80, value: comp.vendor || "" })),
+      h("label", { class: "field" }, "Model",
+        h("input", { id: "ed-model", type: "text", maxlength: 80, value: comp.model || "" })),
+      h("label", { class: "field" }, "Operating system",
+        h("input", { id: "ed-os", type: "text", maxlength: 80, value: comp.os || "", placeholder: "e.g. RHEL 9.4" })),
+      h("label", { class: "field" }, "Zone",
+        h("select", { id: "ed-zone" }, ...zoneNames().map((z) =>
+          h("option", { value: z, selected: z === comp.zone ? true : null }, z)))),
+      h("label", { class: "field" }, "Hosted in",
+        h("select", { id: "ed-parent", disabled: hasChildren ? true : null }, ...parentOptions)),
+      hasChildren ? h("p", { class: "muted", text: "This element hosts other components, so it cannot be nested." }) : null,
+      h("label", { class: "field" }, "Wazuh agent ID",
+        h("input", { id: "ed-agent", type: "text", maxlength: 5, value: comp.agent_id || "", placeholder: "e.g. 001" })),
       h("div", { class: "row" }, h("button", {
         type: "button", class: "primary",
         onclick: () => saveComponentFields(comp.id),
-      }, "Salva componente"))));
+      }, "Save component"))));
 
     root.append(h("h3", { text: "Inventory" }));
-    const invBox = h("div", { id: "inventory" }, h("p", { class: "empty", text: "Caricamento inventory…" }));
+    const invBox = h("div", { id: "inventory" }, h("p", { class: "empty", text: "Loading inventory…" }));
     root.append(invBox);
     loadInventory(comp.id, invBox);
 
     const links = state.arch.edges.filter((e) => e.from === comp.id || e.to === comp.id);
-    root.append(h("h3", { text: `Collegamenti (${links.length})` }));
-    if (links.length === 0) root.append(h("p", { class: "empty", text: "Nessun collegamento." }));
+    root.append(h("h3", { text: `Links (${links.length})` }));
+    if (links.length === 0) root.append(h("p", { class: "empty", text: "No links." }));
     for (const e of links) {
       const other = state.arch.components.find((c) => c.id === (e.from === comp.id ? e.to : e.from));
       const dir = e.from === comp.id ? "→ " : "← ";
       const sel = h("select", { onchange: (ev) => setEdgeNetwork(e, ev.target.value) },
-        h("option", { value: "", selected: !e.network ? true : null }, "— non classificata"),
+        h("option", { value: "", selected: !e.network ? true : null }, "— unclassified"),
         ...Object.entries(NETWORKS).map(([k, st]) =>
           h("option", { value: k, selected: e.network === k ? true : null }, st.label)));
       root.append(h("div", { class: "link-row" },
@@ -653,10 +743,10 @@
         sel));
     }
 
-    root.append(h("h3", { text: "Sotto-punti mappati" }));
+    root.append(h("h3", { text: "Mapped requirements" }));
     const reqIdx = requirementIndex();
     if (!comp.controls || comp.controls.length === 0) {
-      root.append(h("p", { class: "empty", text: "Nessun sotto-punto mappato su questo componente." }));
+      root.append(h("p", { class: "empty", text: "No requirement mapped to this component." }));
       return;
     }
     for (const reqId of comp.controls) {
@@ -665,15 +755,15 @@
       const selId = `st-${comp.id}-${reqId}`;
       const rationaleId = `ra-${comp.id}-${reqId}`;
       root.append(h("div", { class: "assessment" },
-        h("p", {}, h("strong", { text: reqId + " " }), info ? info.req.text : "(requisito non trovato)"),
-        h("label", { class: "field" }, "Esito", statusSelect(selId, current.status)),
-        h("label", { class: "field" }, "Motivazione / evidenza",
+        h("p", {}, h("strong", { text: reqId + " " }), info ? info.req.text : "(requirement not found)"),
+        h("label", { class: "field" }, "Result", statusSelect(selId, current.status)),
+        h("label", { class: "field" }, "Rationale / evidence",
           h("textarea", { id: rationaleId, maxlength: 4000 }, current.rationale || "")),
         h("div", { class: "row" }, h("button", {
           type: "button", class: "primary",
           onclick: () => saveAssessment(reqId, comp.id,
             document.getElementById(selId).value, document.getElementById(rationaleId).value),
-        }, "Salva"))));
+        }, "Save"))));
     }
   }
 
@@ -682,21 +772,21 @@
     if (!info) return;
     root.append(h("h3", { text: `${info.req.id} · ${info.control.title}` }));
     root.append(h("p", {}, info.req.text));
-    root.append(h("p", { class: "muted", text: info.req.mandatory ? "Obbligatorio" : "Advisory" }));
+    root.append(h("p", { class: "muted", text: info.req.mandatory ? "Mandatory" : "Advisory" }));
     const current = statusFor(info.req.id, "");
     root.append(h("div", { class: "assessment" },
-      h("p", { text: "Esito globale dell'istituzione" }),
-      h("label", { class: "field" }, "Esito", statusSelect("st-global", current.status)),
-      h("label", { class: "field" }, "Motivazione",
+      h("p", { text: "Institution-wide result" }),
+      h("label", { class: "field" }, "Result", statusSelect("st-global", current.status)),
+      h("label", { class: "field" }, "Rationale",
         h("textarea", { id: "ra-global", maxlength: 4000 }, current.rationale || "")),
       h("div", { class: "row" }, h("button", {
         type: "button", class: "primary",
         onclick: () => saveAssessment(info.req.id, "",
           document.getElementById("st-global").value, document.getElementById("ra-global").value),
-      }, "Salva"))));
+      }, "Save"))));
     const comps = componentsFor(info.req.id);
-    root.append(h("h3", { text: `Componenti mappati (${comps.length})` }));
-    if (comps.length === 0) root.append(h("p", { class: "empty", text: "Nessun componente mappato." }));
+    root.append(h("h3", { text: `Mapped components (${comps.length})` }));
+    if (comps.length === 0) root.append(h("p", { class: "empty", text: "No component mapped." }));
     for (const c of comps) {
       const st = statusFor(info.req.id, c.id).status;
       root.append(h("button", { type: "button", class: "req", onclick: () => selectComponent(c.id) },
@@ -705,52 +795,45 @@
     }
   }
 
-  function zoneNames() {
-    const names = [];
-    for (const z of state.arch.zones || []) names.push(z.name);
-    for (const c of state.arch.components) if (!names.includes(c.zone)) names.push(c.zone);
-    return names;
-  }
-
   function statusSelect(id, current) {
     return h("select", { id },
       ...STATUSES.map(([code, label]) => h("option", { value: code, selected: code === current ? true : null }, label)));
   }
 
   function renderAddComponent() {
-    const name = h("input", { id: "new-name", type: "text", maxlength: 120, placeholder: "Nome componente" });
-    const sym = h("select", { id: "new-symbol" }, ...symbolOptions("server"));
-    const zone = h("input", { id: "new-zone", type: "text", maxlength: 60, list: "zone-list", value: zoneNames()[0] || "", placeholder: "es. Cloud (esempio)" });
-    const zones = h("datalist", { id: "zone-list" }, ...zoneNames().map((z) => h("option", { value: z })));
-    const vendor = h("input", { id: "new-vendor", type: "text", maxlength: 80, placeholder: "Vendor (opzionale)" });
+    const name = h("input", { id: "new-name", type: "text", maxlength: 120, placeholder: "Component name" });
     const kind = h("select", { id: "new-kind" }, ...Object.entries(KINDS).map(([k, label]) =>
       h("option", { value: k, selected: k === "server" ? true : null }, label)));
-    const os = h("input", { id: "new-os", type: "text", maxlength: 80, placeholder: "Sistema operativo (opzionale)" });
+    const sym = h("select", { id: "new-symbol" }, ...symbolOptions("server"));
+    const zone = h("input", { id: "new-zone", type: "text", maxlength: 60, list: "zone-list", value: zoneNames()[0] || "", placeholder: "e.g. Cloud (example)" });
+    const zones = h("datalist", { id: "zone-list" }, ...zoneNames().map((z) => h("option", { value: z })));
+    const vendor = h("input", { id: "new-vendor", type: "text", maxlength: 80, placeholder: "Vendor (optional)" });
+    const os = h("input", { id: "new-os", type: "text", maxlength: 80, placeholder: "Operating system (optional)" });
     return h("details", { class: "upload", open: true },
-      h("summary", { text: "Aggiungi componente" }),
-      h("label", { class: "field" }, "Nome", name),
-      h("label", { class: "field" }, "Tipo", kind),
-      h("label", { class: "field" }, "Simbolo", sym),
-      h("label", { class: "field" }, "Zona (es. Cloud)", zone, zones),
+      h("summary", { text: "Add component" }),
+      h("label", { class: "field" }, "Name", name),
+      h("label", { class: "field" }, "Type", kind),
+      h("label", { class: "field" }, "Symbol", sym),
+      h("label", { class: "field" }, "Zone (type a new name to create one)", zone, zones),
       h("label", { class: "field" }, "Vendor", vendor),
-      h("label", { class: "field" }, "Sistema operativo", os),
-      h("button", { type: "button", class: "primary", onclick: addComponent }, "Aggiungi"));
+      h("label", { class: "field" }, "Operating system", os),
+      h("button", { type: "button", class: "primary", onclick: addComponent }, "Add component"));
   }
 
   function renderAddEdge() {
     const from = h("select", { id: "new-from" }, ...state.arch.components.map((c) => h("option", { value: c.id }, c.name)));
     const to = h("select", { id: "new-to" }, ...state.arch.components.map((c) => h("option", { value: c.id }, c.name)));
     const net = h("select", { id: "new-net" },
-      h("option", { value: "" }, "— non classificata"),
+      h("option", { value: "" }, "— unclassified"),
       ...Object.entries(NETWORKS).map(([k, st]) => h("option", { value: k }, st.label)));
-    const label = h("input", { id: "new-label", type: "text", maxlength: 80, placeholder: "Etichetta (es. HTTPS)" });
+    const label = h("input", { id: "new-label", type: "text", maxlength: 80, placeholder: "Label (e.g. HTTPS)" });
     return h("details", { class: "upload" },
-      h("summary", { text: "Aggiungi collegamento" }),
-      h("label", { class: "field" }, "Da", from),
-      h("label", { class: "field" }, "A", to),
-      h("label", { class: "field" }, "Tipo di rete", net),
-      h("label", { class: "field" }, "Etichetta", label),
-      h("button", { type: "button", class: "primary", onclick: addEdge }, "Aggiungi collegamento"));
+      h("summary", { text: "Add link" }),
+      h("label", { class: "field" }, "From", from),
+      h("label", { class: "field" }, "To", to),
+      h("label", { class: "field" }, "Network type", net),
+      h("label", { class: "field" }, "Label", label),
+      h("button", { type: "button", class: "primary", onclick: addEdge }, "Add link"));
   }
 
   async function loadInventory(compId, box) {
@@ -762,7 +845,7 @@
       }
       box.replaceChildren();
       if (items.length === 0) {
-        box.append(h("p", { class: "empty", text: "Nessun dato. Usa «Sincronizza Wazuh» se l'agent è configurato." }));
+        box.append(h("p", { class: "empty", text: "No data yet. Run “Sync Wazuh” if the agent is configured." }));
         return;
       }
       const first = (cat) => items.find((i) => i.category === cat);
@@ -770,14 +853,14 @@
       const hw = first("hardware");
       const os = first("os");
       const lines = [];
-      if (hw) lines.push(`CPU: ${hw.fields["cpu.name"] || "—"}`, `RAM: ${hw.fields["ram.total"] || "—"}`, `Seriale: ${hw.fields["board_serial"] || "—"}`);
+      if (hw) lines.push(`CPU: ${hw.fields["cpu.name"] || "—"}`, `RAM: ${hw.fields["ram.total"] || "—"}`, `Serial: ${hw.fields["board_serial"] || "—"}`);
       if (os) lines.push(`OS: ${os.fields["os.name"] || ""} ${os.fields["os.version"] || ""}`.trim());
-      lines.push(`Pacchetti: ${count("packages")} · Porte in ascolto: ${count("ports")}`);
-      const seen = items[0].seen_at ? new Date(items[0].seen_at).toLocaleString("it-IT") : "—";
+      lines.push(`Packages: ${count("packages")} · Listening ports: ${count("ports")}`);
+      const seen = items[0].seen_at ? new Date(items[0].seen_at).toLocaleString("en-GB") : "—";
       box.append(h("ul", { class: "inv-list" }, ...lines.map((l) => h("li", { text: l }))));
-      box.append(h("p", { class: "muted", text: `Fonte: ${items[0].source} · rilevato: ${seen}` }));
+      box.append(h("p", { class: "muted", text: `Source: ${items[0].source} · last seen: ${seen}` }));
     } catch (err) {
-      box.replaceChildren(h("p", { class: "empty", text: "Inventory non disponibile: " + err.message }));
+      box.replaceChildren(h("p", { class: "empty", text: "Inventory not available: " + err.message }));
     }
   }
 
@@ -804,7 +887,7 @@
       if (okText) flash(okText, "ok");
       refresh();
     } catch (err) {
-      flash("Modifica non salvata: " + err.message, "error");
+      flash("Change not saved: " + err.message, "error");
     }
   }
 
@@ -813,65 +896,65 @@
     const host = state.arch.components.find((x) => x.id === parentId);
     const values = {
       name: $("#ed-name").value.trim(),
+      kind: $("#ed-kind").value,
       symbol: $("#ed-symbol").value,
       vendor: $("#ed-vendor").value.trim(),
       model: $("#ed-model").value.trim(),
       os: $("#ed-os").value.trim(),
-      kind: $("#ed-kind").value,
       zone: host ? host.zone : $("#ed-zone").value,
       parent: parentId,
       agent_id: $("#ed-agent").value.trim(),
     };
-    if (!values.name) { flash("Il nome è obbligatorio.", "error"); return; }
+    if (!values.name) { flash("Name is required.", "error"); return; }
     saveArchitecture((arch) => {
       const c = arch.components.find((x) => x.id === id);
       Object.assign(c, values);
       for (const k of ["agent_id", "vendor", "model", "os", "parent"]) {
         if (!c[k]) delete c[k];
       }
-    }, "Componente salvato.");
+    }, "Component saved.");
   }
 
   function setEdgeNetwork(edge, network) {
     saveArchitecture((arch) => {
       const e = arch.edges.find((x) => x.from === edge.from && x.to === edge.to && x.label === edge.label);
-      if (!e) throw new Error("collegamento non trovato");
+      if (!e) throw new Error("link not found");
       if (network) e.network = network; else delete e.network;
-    }, "Tipo di rete aggiornato.");
+    }, "Network type updated.");
   }
 
   function addComponent() {
     const name = $("#new-name").value.trim();
-    if (!name) { flash("Indica il nome del componente.", "error"); return; }
+    if (!name) { flash("Enter a component name.", "error"); return; }
     const id = "c-" + Date.now().toString(36);
     saveArchitecture((arch) => {
       arch.components.push({
         id,
         name,
         kind: $("#new-kind").value,
-        zone: $("#new-zone").value,
+        zone: $("#new-zone").value.trim(),
         symbol: $("#new-symbol").value,
         vendor: $("#new-vendor").value.trim() || undefined,
         os: $("#new-os").value.trim() || undefined,
       });
-    }, "Componente aggiunto.");
+    }, "Component added.");
   }
 
   function addEdge() {
     const from = $("#new-from").value;
     const to = $("#new-to").value;
-    if (from === to) { flash("Un collegamento deve unire due componenti diversi.", "error"); return; }
+    if (from === to) { flash("A link must join two different components.", "error"); return; }
     const network = $("#new-net").value;
     const label = $("#new-label").value.trim();
     saveArchitecture((arch) => {
       arch.edges.push({ from, to, label: label || undefined, network: network || undefined });
-    }, "Collegamento aggiunto.");
+    }, "Link added.");
   }
 
   async function saveAssessment(reqId, compId, status, rationale) {
     const auditor = $("#auditor").value.trim();
     if (!auditor) {
-      flash("Inserisci il nome dell'auditor prima di salvare.", "error");
+      flash("Enter the auditor's name before saving.", "error");
       $("#auditor").focus();
       return;
     }
@@ -881,25 +964,25 @@
         method: "PUT",
         body: JSON.stringify({ requirement_id: reqId, component_id: compId, status, rationale, auditor }),
       });
-      flash("Valutazione salvata.", "ok");
+      flash("Assessment saved.", "ok");
       refresh();
     } catch (err) {
-      flash("Salvataggio non riuscito: " + err.message, "error");
+      flash("Save failed: " + err.message, "error");
     }
   }
 
   async function syncWazuh() {
     const btn = $("#btn-sync");
     btn.disabled = true;
-    flash("Sincronizzazione con Wazuh in corso…");
+    flash("Syncing with Wazuh…");
     try {
       const res = await api("/api/wazuh/sync", { method: "POST" });
       state.inventory = {};
       const errs = Object.keys(res.errors || {}).length;
-      flash(`Sincronizzati ${res.synced} componenti${errs ? ` · ${errs} con errori (vedi log del server)` : ""}.`, errs ? "error" : "ok");
+      flash(`Synced ${res.synced} component${res.synced === 1 ? "" : "s"}${errs ? ` · ${errs} with errors (see server log)` : ""}.`, errs ? "error" : "ok");
       refresh();
     } catch (err) {
-      flash("Sincronizzazione non riuscita: " + err.message, "error");
+      flash("Sync failed: " + err.message, "error");
     } finally {
       btn.disabled = false;
     }
@@ -907,6 +990,7 @@
 
   function refresh() {
     renderMap();
+    renderTree();
     renderControls();
     renderDetail();
     renderSymbolLibrary();
@@ -923,13 +1007,13 @@
       state.arch = arch;
       state.assessments = assessments;
     } catch (err) {
-      flash("Impossibile caricare i dati: " + err.message, "error");
+      flash("Could not load data: " + err.message, "error");
       return;
     }
     try {
       await loadSymbols();
     } catch (err) {
-      flash("Libreria simboli non disponibile: " + err.message, "error");
+      flash("Symbol library not available: " + err.message, "error");
     }
     try {
       const saved = localStorage.getItem("auditor");
@@ -938,6 +1022,7 @@
     bindMapInteractions();
     renderLegend();
     $("#btn-sync").addEventListener("click", syncWazuh);
+    $("#tree-search").addEventListener("input", renderTree);
     refresh();
   }
 

@@ -101,7 +101,7 @@ func (s *Server) architecture(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) putArchitecture(w http.ResponseWriter, r *http.Request) {
 	var arch model.Architecture
 	if err := decode(w, r, &arch); err != nil {
-		writeError(w, http.StatusBadRequest, "JSON non valido: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
 	err := s.Store.Write(func(db *model.Database) error {
@@ -126,7 +126,7 @@ func (s *Server) inventory(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	s.Store.Read(func(db model.Database) {
 		if _, ok := db.ComponentByID(id); !ok {
-			writeError(w, http.StatusNotFound, "componente non trovato")
+			writeError(w, http.StatusNotFound, "component not found")
 			return
 		}
 		items := db.Inventory[id]
@@ -139,7 +139,7 @@ func (s *Server) inventory(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) syncWazuh(w http.ResponseWriter, r *http.Request) {
 	if s.Wazuh == nil {
-		writeError(w, http.StatusServiceUnavailable, "Wazuh non configurato (variabili WAZUH_URL, WAZUH_USER, WAZUH_PASSWORD)")
+		writeError(w, http.StatusServiceUnavailable, "Wazuh is not configured (set WAZUH_URL, WAZUH_USER, WAZUH_PASSWORD)")
 		return
 	}
 	var comps []model.Component
@@ -194,29 +194,29 @@ type assessmentInput struct {
 func (s *Server) putAssessment(w http.ResponseWriter, r *http.Request) {
 	var in assessmentInput
 	if err := decode(w, r, &in); err != nil {
-		writeError(w, http.StatusBadRequest, "JSON non valido: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
 	if !model.ValidStatus(in.Status) {
-		writeError(w, http.StatusBadRequest, "stato non valido")
+		writeError(w, http.StatusBadRequest, "invalid status")
 		return
 	}
 	if strings.TrimSpace(in.Auditor) == "" {
-		writeError(w, http.StatusBadRequest, "indicare l'auditor")
+		writeError(w, http.StatusBadRequest, "auditor name is required")
 		return
 	}
 	if len(in.Rationale) > 4000 {
-		writeError(w, http.StatusBadRequest, "motivazione troppo lunga")
+		writeError(w, http.StatusBadRequest, "rationale is too long")
 		return
 	}
 	now := s.Now().UTC()
 	err := s.Store.Write(func(db *model.Database) error {
 		if _, ok := db.Framework.RequirementIndex()[in.RequirementID]; !ok {
-			return fmt.Errorf("requisito sconosciuto: %s", in.RequirementID)
+			return fmt.Errorf("unknown requirement: %s", in.RequirementID)
 		}
 		if in.ComponentID != "" {
 			if _, ok := db.ComponentByID(in.ComponentID); !ok {
-				return fmt.Errorf("componente sconosciuto: %s", in.ComponentID)
+				return fmt.Errorf("unknown component: %s", in.ComponentID)
 			}
 		}
 		a := model.Assessment{
@@ -285,16 +285,16 @@ type symbolInput struct {
 func (s *Server) addSymbol(w http.ResponseWriter, r *http.Request) {
 	var in symbolInput
 	if err := decode(w, r, &in); err != nil {
-		writeError(w, http.StatusBadRequest, "JSON non valido: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
 	name := strings.TrimSpace(in.Name)
 	if name == "" || len([]rune(name)) > 80 {
-		writeError(w, http.StatusBadRequest, "nome simbolo obbligatorio (max 80 caratteri)")
+		writeError(w, http.StatusBadRequest, "symbol name is required (max 80 characters)")
 		return
 	}
 	if len([]rune(in.Vendor)) > 80 {
-		writeError(w, http.StatusBadRequest, "vendor troppo lungo")
+		writeError(w, http.StatusBadRequest, "vendor name is too long")
 		return
 	}
 	clean, err := symbols.Sanitize(in.SVG)
@@ -320,7 +320,7 @@ func (s *Server) addSymbol(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err == errSymbolExists {
-		writeError(w, http.StatusConflict, "simbolo già presente")
+		writeError(w, http.StatusConflict, "symbol already exists")
 		return
 	}
 	if err != nil {
@@ -338,7 +338,7 @@ func (s *Server) deleteSymbol(w http.ResponseWriter, r *http.Request) {
 		ref := "custom:" + id
 		for _, c := range db.Architecture.Components {
 			if c.Symbol == ref {
-				return fmt.Errorf("simbolo in uso su %s", c.Name)
+				return fmt.Errorf("symbol is in use by %s", c.Name)
 			}
 		}
 		kept := db.Symbols[:0]
@@ -358,8 +358,8 @@ func (s *Server) deleteSymbol(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case err == errNotFound:
-		writeError(w, http.StatusNotFound, "simbolo non trovato")
-	case err != nil && strings.HasPrefix(err.Error(), "simbolo in uso"):
+		writeError(w, http.StatusNotFound, "symbol not found")
+	case err != nil && strings.HasPrefix(err.Error(), "symbol is in use"):
 		writeError(w, http.StatusConflict, err.Error())
 	case err != nil:
 		writeError(w, http.StatusInternalServerError, err.Error())
