@@ -1,22 +1,31 @@
 {
   "name": "Architettura di esempio (dati fittizi)",
+  "zones": [
+    { "name": "Esterno", "network": "internet" },
+    { "name": "DMZ", "network": "dmz" },
+    { "name": "Zona SWIFT", "network": "swift" },
+    { "name": "Zona operatori", "network": "internal" },
+    { "name": "Zona sicurezza", "network": "management" }
+  ],
   "components": [
-    { "id": "ext-internet", "name": "Internet", "kind": "external", "zone": "Esterno" },
-    { "id": "fw-edge", "name": "Firewall perimetrale", "kind": "network", "zone": "DMZ", "agent_id": "001", "controls": ["1.4.1"] },
-    { "id": "proxy-web", "name": "Proxy di navigazione", "kind": "server", "zone": "DMZ", "agent_id": "002", "controls": ["1.4.1", "6.4.1"] },
-    { "id": "swift-gw", "name": "SWIFT Alliance Gateway", "kind": "application", "zone": "Zona SWIFT", "agent_id": "003", "controls": ["1.1.1", "2.3.1", "2.3.2", "2.2.1", "6.1.1"] },
-    { "id": "swift-db", "name": "Database messaggi", "kind": "database", "zone": "Zona SWIFT", "agent_id": "004", "controls": ["1.2.1", "5.1.1", "2.3.1"] },
-    { "id": "ws-op", "name": "Workstation operatore", "kind": "workstation", "zone": "Zona operatori", "agent_id": "005", "controls": ["4.1.1", "5.1.1", "6.1.1"] },
-    { "id": "siem", "name": "SIEM / Wazuh manager", "kind": "server", "zone": "Zona sicurezza", "controls": ["6.4.1", "6.4.2", "7.1.1"] },
-    { "id": "scanner", "name": "Scanner vulnerabilità", "kind": "server", "zone": "Zona sicurezza", "controls": ["2.7.1"] }
+    { "id": "ext-internet", "name": "Internet", "kind": "external", "zone": "Esterno", "symbol": "internet" },
+    { "id": "fw-edge", "name": "Firewall perimetrale", "kind": "network", "zone": "DMZ", "symbol": "firewall", "vendor": "Esempio", "model": "NGFW-A", "agent_id": "001", "controls": ["1.4.1"] },
+    { "id": "proxy-web", "name": "Proxy di navigazione", "kind": "server", "zone": "DMZ", "symbol": "server", "agent_id": "002", "controls": ["1.4.1", "6.4.1"] },
+    { "id": "swift-gw", "name": "SWIFT Alliance Gateway", "kind": "application", "zone": "Zona SWIFT", "symbol": "appliance", "agent_id": "003", "controls": ["1.1.1", "2.3.1", "2.3.2", "2.2.1", "6.1.1"] },
+    { "id": "swift-db", "name": "Database messaggi", "kind": "database", "zone": "Zona SWIFT", "symbol": "database", "agent_id": "004", "controls": ["1.2.1", "5.1.1", "2.3.1"] },
+    { "id": "hsm-1", "name": "HSM firma", "kind": "hsm", "zone": "Zona SWIFT", "symbol": "hsm", "controls": ["5.1.1"] },
+    { "id": "ws-op", "name": "Workstation operatore", "kind": "workstation", "zone": "Zona operatori", "symbol": "workstation", "agent_id": "005", "controls": ["4.1.1", "5.1.1", "6.1.1"] },
+    { "id": "siem", "name": "SIEM / Wazuh manager", "kind": "server", "zone": "Zona sicurezza", "symbol": "server", "controls": ["6.4.1", "6.4.2", "7.1.1"] },
+    { "id": "scanner", "name": "Scanner vulnerabilità", "kind": "server", "zone": "Zona sicurezza", "symbol": "server", "controls": ["2.7.1"] }
   ],
   "edges": [
-    { "from": "ext-internet", "to": "fw-edge", "label": "HTTPS" },
-    { "from": "fw-edge", "to": "proxy-web", "label": "HTTP/S filtrato" },
-    { "from": "ws-op", "to": "swift-gw", "label": "sessione operatore" },
-    { "from": "swift-gw", "to": "swift-db", "label": "messaggi" },
-    { "from": "swift-gw", "to": "proxy-web", "label": "aggiornamenti" },
-    { "from": "swift-gw", "to": "siem", "label": "log (Wazuh agent)" },
-    { "from": "scanner", "to": "swift-gw", "label": "scansione" }
+    { "from": "ext-internet", "to": "fw-edge", "label": "HTTPS", "network": "internet" },
+    { "from": "fw-edge", "to": "proxy-web", "label": "HTTP/S filtrato", "network": "dmz" },
+    { "from": "ws-op", "to": "swift-gw", "label": "sessione operatore", "network": "swift" },
+    { "from": "swift-gw", "to": "swift-db", "label": "messaggi", "network": "swift" },
+    { "from": "swift-gw", "to": "hsm-1", "label": "firma", "network": "swift" },
+    { "from": "swift-gw", "to": "proxy-web", "label": "aggiornamenti", "network": "dmz" },
+    { "from": "swift-gw", "to": "siem", "label": "log (Wazuh agent)", "network": "management" },
+    { "from": "scanner", "to": "swift-gw", "label": "scansione", "network": "management" }
   ]
 }

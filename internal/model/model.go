@@ -52,22 +52,27 @@ type Requirement struct {
 type Component struct {
 	ID       string   `json:"id"`
 	Name     string   `json:"name"`
-	Kind     string   `json:"kind"`               // server, network, application, database, hsm, workstation, external
-	Zone     string   `json:"zone"`               // logical zone used for layout: e.g. "Internet", "DMZ", "SWIFT zone"
+	Kind     string   `json:"kind"`             // server, network, application, database, hsm, workstation, external
+	Zone     string   `json:"zone"`             // logical zone used for layout: e.g. "Internet", "DMZ", "SWIFT zone"
+	Symbol   string   `json:"symbol,omitempty"` // generic symbol or "custom:<id>"
+	Vendor   string   `json:"vendor,omitempty"`
+	Model    string   `json:"model,omitempty"`
 	AgentID  string   `json:"agent_id,omitempty"` // Wazuh agent id used for discovery
 	Controls []string `json:"controls,omitempty"` // requirement ids mapped to this component
 }
 
 // Edge is a data flow between two components.
 type Edge struct {
-	From  string `json:"from"`
-	To    string `json:"to"`
-	Label string `json:"label,omitempty"`
+	From    string `json:"from"`
+	To      string `json:"to"`
+	Label   string `json:"label,omitempty"`
+	Network string `json:"network,omitempty"` // see NetworkTypes
 }
 
 // Architecture is the map of components and flows for one institution.
 type Architecture struct {
 	Name       string      `json:"name"`
+	Zones      []Zone      `json:"zones,omitempty"`
 	Components []Component `json:"components"`
 	Edges      []Edge      `json:"edges"`
 }
@@ -108,6 +113,7 @@ type Database struct {
 	Inventory    map[string][]InventoryItem `json:"inventory"` // key: component id
 	Evidence     []Evidence                 `json:"evidence"`
 	Assessments  []Assessment               `json:"assessments"`
+	Symbols      []CustomSymbol             `json:"symbols,omitempty"`
 }
 
 // RequirementIndex returns all requirements keyed by id, with their control id.

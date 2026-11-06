@@ -6,7 +6,7 @@ import (
 	"io/fs"
 )
 
-//go:embed index.html app.js style.css
+//go:embed index.html app.js symbols.js style.css
 var files embed.FS
 
 // Files returns the static files rooted at the web directory.

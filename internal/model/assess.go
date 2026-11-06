@@ -61,7 +61,25 @@ func (d Database) Validate() []string {
 		}
 		ids[c.ID] = true
 	}
+	zones := map[string]bool{}
+	for _, z := range d.Architecture.Zones {
+		if !ValidNetwork(z.Network) || z.Network == "" {
+			problems = append(problems, "tipo di rete non valido per la zona "+z.Name+": "+z.Network)
+		}
+		zones[z.Name] = true
+	}
+	for _, c := range d.Architecture.Components {
+		if !d.ValidSymbol(c.Symbol) {
+			problems = append(problems, "simbolo non valido su "+c.ID+": "+c.Symbol)
+		}
+		if len(zones) > 0 && !zones[c.Zone] {
+			problems = append(problems, "zona sconosciuta su "+c.ID+": "+c.Zone)
+		}
+	}
 	for _, e := range d.Architecture.Edges {
+		if !ValidNetwork(e.Network) {
+			problems = append(problems, "tipo di rete non valido sul flusso "+e.From+"->"+e.To+": "+e.Network)
+		}
 		if !ids[e.From] {
 			problems = append(problems, "arco da componente sconosciuto: "+e.From)
 		}

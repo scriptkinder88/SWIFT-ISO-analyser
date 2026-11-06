@@ -3,6 +3,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -10,11 +12,13 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/scriptkinder88/swift-iso-analyser/internal/model"
 	"github.com/scriptkinder88/swift-iso-analyser/internal/pptx"
 	"github.com/scriptkinder88/swift-iso-analyser/internal/report"
 	"github.com/scriptkinder88/swift-iso-analyser/internal/store"
+	"github.com/scriptkinder88/swift-iso-analyser/internal/symbols"
 	"github.com/scriptkinder88/swift-iso-analyser/internal/wazuh"
 )
 
@@ -38,6 +42,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/architecture", s.putArchitecture)
 	mux.HandleFunc("GET /api/components/{id}/inventory", s.inventory)
 	mux.HandleFunc("POST /api/wazuh/sync", s.syncWazuh)
+	mux.HandleFunc("GET /api/symbols", s.listSymbols)
+	mux.HandleFunc("POST /api/symbols", s.addSymbol)
+	mux.HandleFunc("DELETE /api/symbols/{id}", s.deleteSymbol)
 	mux.HandleFunc("GET /api/assessments", s.assessments)
 	mux.HandleFunc("PUT /api/assessments", s.putAssessment)
 	mux.HandleFunc("GET /api/report.pptx", s.reportPPTX)
@@ -251,4 +258,141 @@ func (s *Server) reportPPTX(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, name))
 	w.Header().Set("Content-Length", fmt.Sprint(len(data)))
 	_, _ = w.Write(data)
+}
+
+// symbolsResponse lists the symbols the editor can offer.
+type symbolsResponse struct {
+	Generic []string             `json:"generic"`
+	Custom  []model.CustomSymbol `json:"custom"`
+}
+
+func (s *Server) listSymbols(w http.ResponseWriter, _ *http.Request) {
+	s.Store.Read(func(db model.Database) {
+		custom := db.Symbols
+		if custom == nil {
+			custom = []model.CustomSymbol{}
+		}
+		writeJSON(w, http.StatusOK, symbolsResponse{Generic: model.GenericSymbols, Custom: custom})
+	})
+}
+
+type symbolInput struct {
+	Name   string `json:"name"`
+	Vendor string `json:"vendor"`
+	SVG    string `json:"svg"`
+}
+
+func (s *Server) addSymbol(w http.ResponseWriter, r *http.Request) {
+	var in symbolInput
+	if err := decode(w, r, &in); err != nil {
+		writeError(w, http.StatusBadRequest, "JSON non valido: "+err.Error())
+		return
+	}
+	name := strings.TrimSpace(in.Name)
+	if name == "" || len([]rune(name)) > 80 {
+		writeError(w, http.StatusBadRequest, "nome simbolo obbligatorio (max 80 caratteri)")
+		return
+	}
+	if len([]rune(in.Vendor)) > 80 {
+		writeError(w, http.StatusBadRequest, "vendor troppo lungo")
+		return
+	}
+	clean, err := symbols.Sanitize(in.SVG)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	sum := sha256.Sum256([]byte(clean.SVG))
+	sym := model.CustomSymbol{
+		ID:      slug(name) + "-" + hex.EncodeToString(sum[:4]),
+		Name:    name,
+		Vendor:  strings.TrimSpace(in.Vendor),
+		ViewBox: clean.ViewBox,
+		SVG:     clean.SVG,
+	}
+	err = s.Store.Write(func(db *model.Database) error {
+		for _, c := range db.Symbols {
+			if c.ID == sym.ID {
+				return errSymbolExists
+			}
+		}
+		db.Symbols = append(db.Symbols, sym)
+		return nil
+	})
+	if err == errSymbolExists {
+		writeError(w, http.StatusConflict, "simbolo già presente")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, sym)
+}
+
+var errSymbolExists = fmt.Errorf("symbol exists")
+
+func (s *Server) deleteSymbol(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	err := s.Store.Write(func(db *model.Database) error {
+		ref := "custom:" + id
+		for _, c := range db.Architecture.Components {
+			if c.Symbol == ref {
+				return fmt.Errorf("simbolo in uso su %s", c.Name)
+			}
+		}
+		kept := db.Symbols[:0]
+		found := false
+		for _, c := range db.Symbols {
+			if c.ID == id {
+				found = true
+				continue
+			}
+			kept = append(kept, c)
+		}
+		if !found {
+			return errNotFound
+		}
+		db.Symbols = kept
+		return nil
+	})
+	switch {
+	case err == errNotFound:
+		writeError(w, http.StatusNotFound, "simbolo non trovato")
+	case err != nil && strings.HasPrefix(err.Error(), "simbolo in uso"):
+		writeError(w, http.StatusConflict, err.Error())
+	case err != nil:
+		writeError(w, http.StatusInternalServerError, err.Error())
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+var errNotFound = fmt.Errorf("not found")
+
+// slug turns a name into a url-safe id fragment.
+func slug(s string) string {
+	var b strings.Builder
+	dash := false
+	for _, r := range strings.ToLower(s) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			if r < 128 {
+				b.WriteRune(r)
+				dash = false
+			}
+			continue
+		}
+		if !dash && b.Len() > 0 {
+			b.WriteByte('-')
+			dash = true
+		}
+	}
+	out := strings.TrimRight(b.String(), "-")
+	if out == "" {
+		out = "simbolo"
+	}
+	if len(out) > 40 {
+		out = out[:40]
+	}
+	return out
 }
