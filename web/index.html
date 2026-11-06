@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SWIFT ISO Analyser</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>SWIFT ISO Analyser</h1>
+    <div class="actions">
+      <button id="btn-sync" type="button" title="Legge inventory dagli agent Wazuh">Sincronizza Wazuh</button>
+      <a id="btn-export" class="button" href="/api/report.pptx" download>Scarica PowerPoint</a>
+    </div>
+    <p id="message" class="message" role="status" aria-live="polite"></p>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar" aria-label="Framework">
+      <h2>Framework</h2>
+      <p id="framework-meta" class="muted"></p>
+      <div id="controls"></div>
+    </aside>
+
+    <section class="map-wrap" aria-label="Mappa architettura">
+      <div class="map-tools">
+        <button type="button" id="zoom-in" aria-label="Zoom avanti">+</button>
+        <button type="button" id="zoom-out" aria-label="Zoom indietro">−</button>
+        <button type="button" id="zoom-reset">Reset</button>
+        <span class="muted">Trascina per spostarti, rotella per lo zoom. Clic su un componente o un sotto-punto.</span>
+      </div>
+      <svg id="map" role="img" aria-label="Diagramma dell'architettura"></svg>
+      <div class="legend">
+        <span><i class="dot ok"></i>Conforme</span>
+        <span><i class="dot partial"></i>Parziale</span>
+        <span><i class="dot ko"></i>Non conforme</span>
+        <span><i class="dot todo"></i>Da valutare</span>
+      </div>
+    </section>
+
+    <aside class="panel" id="panel" aria-label="Dettaglio">
+      <label class="field">
+        Auditor
+        <input id="auditor" type="text" maxlength="120" placeholder="Nome e cognome" autocomplete="off">
+      </label>
+      <div id="detail"></div>
+    </aside>
+  </main>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>

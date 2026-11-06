@@ -1,0 +1,87 @@
+{
+  "id": "swift-cscf",
+  "name": "SWIFT Customer Security Controls Framework (CSCF)",
+  "version": "bozza-di-lavoro",
+  "note": "BOZZA. Testi e numerazione sono di esempio: confrontarli con la versione corrente del CSCF pubblicata da SWIFT prima di usare il tool per un audit. Le sigle dei sotto-punti (x.y.z) sono interne al tool.",
+  "controls": [
+    {
+      "id": "1.1",
+      "title": "SWIFT Environment Protection",
+      "requirements": [
+        { "id": "1.1.1", "text": "Ambiente SWIFT segregato dalla rete aziendale generica e dall'accesso internet", "mandatory": true }
+      ]
+    },
+    {
+      "id": "1.2",
+      "title": "Operating System Privileged Account Control",
+      "requirements": [
+        { "id": "1.2.1", "text": "Account privilegiati del sistema operativo limitati e controllati", "mandatory": true }
+      ]
+    },
+    {
+      "id": "1.4",
+      "title": "Restriction of Internet Access",
+      "requirements": [
+        { "id": "1.4.1", "text": "Accesso internet dai componenti SWIFT limitato o bloccato", "mandatory": true, "architecture": ["A1", "A2", "A3", "A4"] }
+      ]
+    },
+    {
+      "id": "2.2",
+      "title": "Security Updates",
+      "requirements": [
+        { "id": "2.2.1", "text": "Patch di sicurezza applicate entro tempi definiti", "mandatory": true }
+      ]
+    },
+    {
+      "id": "2.3",
+      "title": "System Hardening",
+      "requirements": [
+        { "id": "2.3.1", "text": "Configurazione hardening documentata e applicata ai server", "mandatory": true },
+        { "id": "2.3.2", "text": "Servizi e porte non necessari disabilitati", "mandatory": true }
+      ]
+    },
+    {
+      "id": "2.7",
+      "title": "Vulnerability Scanning",
+      "requirements": [
+        { "id": "2.7.1", "text": "Scansioni di vulnerabilità periodiche sui componenti SWIFT", "mandatory": true }
+      ]
+    },
+    {
+      "id": "4.1",
+      "title": "Password Policy",
+      "requirements": [
+        { "id": "4.1.1", "text": "Policy password che rispetta i requisiti minimi di complessità e rotazione", "mandatory": true }
+      ]
+    },
+    {
+      "id": "5.1",
+      "title": "Logical Access Control",
+      "requirements": [
+        { "id": "5.1.1", "text": "Accesso logico limitato al principio del minimo privilegio", "mandatory": true }
+      ]
+    },
+    {
+      "id": "6.1",
+      "title": "Malware Protection",
+      "requirements": [
+        { "id": "6.1.1", "text": "Protezione anti-malware attiva e aggiornata su tutti i componenti", "mandatory": true }
+      ]
+    },
+    {
+      "id": "6.4",
+      "title": "Logging and Monitoring",
+      "requirements": [
+        { "id": "6.4.1", "text": "Log di sicurezza raccolti e conservati in modo centralizzato", "mandatory": true },
+        { "id": "6.4.2", "text": "Monitoraggio e alerting sugli eventi di sicurezza", "mandatory": true }
+      ]
+    },
+    {
+      "id": "7.1",
+      "title": "Cyber Incident Response Planning",
+      "requirements": [
+        { "id": "7.1.1", "text": "Piano di risposta agli incidenti cyber documentato e testato", "mandatory": true }
+      ]
+    }
+  ]
+}

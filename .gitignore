@@ -1,0 +1,10 @@
+# Runtime state (contains audit data: never commit)
+var/
+*.tmp
+
+# Build output
+/swift-server
+/bin/
+*.exe
+*.test
+*.out
